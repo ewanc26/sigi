@@ -1,0 +1,12 @@
+\\\\ While loops in Sigi
+\\\\ [ body ] loops while stack top is nonzero
+\\\\ Stack top is the counter; body should update it for next iteration
+
+\\\\ Count down from 5:
+\\\\ Pattern: push counter, while loop
+\\\\ Body: @ dup, | print, !1 - decrement
+\\\\ At end of body, stack top is new counter
+
+!5 [ @ | !1 - ]
+$                      \\\\ leave clean (drops final 0)
+

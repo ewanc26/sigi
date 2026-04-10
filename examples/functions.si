@@ -1,0 +1,19 @@
+\\\\ Functions in Sigi
+\\\\ {N ops} defines function N
+\\\\ (N) calls function N
+
+\\\\ Define function 0
+{0
+    "Function 0 says: "
+    !42 |
+}
+
+\\\\ Define function 1
+{1
+    "Function 1 says: "
+    !99 |
+}
+
+\\\\ Call them
+(0)
+(1)

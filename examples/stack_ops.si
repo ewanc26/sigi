@@ -1,0 +1,15 @@
+\\\\ Stack operations
+
+\\\\ @ = DUP (duplicate top)
+!5 @ + |    \\\\ 10 (5 + dup of 5)
+
+\\\\ # = SWAP (swap top two)
+!1 !2 # | |  \\\\ prints 1 then 2 (swapped)
+
+\\\\ $ = DROP (discard top)
+!1 !2 !3 $ | |  \\\\ prints 2 then 1
+
+\\\\ 0-99 = push variable value
+\\\\ : = store to variable (pop val, pop addr, store)
+!42 !0 :    \\\\ store 42 in var 0
+0 |         \\\\ print var 0 (42)
