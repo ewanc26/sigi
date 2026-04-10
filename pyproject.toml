@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sigi"
+version = "1.0.0"
+description = "A symbolic esoteric stack language that compiles to C"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[project.scripts]
+sigic = "sigi.main:main"

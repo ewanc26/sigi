@@ -1,0 +1,15 @@
+\\\\ Control flow in Sigi
+
+\\\\ If-else: { then_ops ; else_ops }
+\\\\ Condition is popped from stack before block
+
+!1 { "condition was true\n" ; "condition was false\n" }
+
+!0 { "condition was true\n" ; "condition was false\n" }
+
+\\\\ Comparisons
+!3 !5 < |        \\\\ 1 (3 < 5 is true)
+!5 !3 > |        \\\\ 1 (5 > 3 is true)
+!3 !3 = |        \\\\ 1 (3 == 3 is true)
+!0 ~ |           \\\\ 1 (NOT 0 is true)
+!5 ~ |           \\\\ 0 (NOT 5 is false)
