@@ -2,8 +2,8 @@
 
 from typing import List, Optional, Tuple
 
-from .ast import Op, Function, Program
-from .lexer import Token, LexError
+from .ast import Function, Op, Program
+from .lexer import LexError, Token
 
 
 class ParseError(Exception):
@@ -51,7 +51,9 @@ class Parser:
 
     def _consume(self, kind: str, msg: str) -> Token:
         if self._current().kind != kind:
-            raise ParseError(f"{msg} at {self._current().line}:{self._current().col}; got {self._current().kind}")
+            raise ParseError(
+                f"{msg} at {self._current().line}:{self._current().col}; got {self._current().kind}"
+            )
         return self._advance()
 
     def parse(self) -> Program:
@@ -77,10 +79,14 @@ class Parser:
         # Get function number (can be VAR for 0-9, or NUM for larger)
         num_tok = self._current()
         if num_tok.kind not in ("NUM", "VAR"):
-            raise ParseError(f"Expected function number after '{{' at {num_tok.line}:{num_tok.col}")
+            raise ParseError(
+                f"Expected function number after '{{' at {num_tok.line}:{num_tok.col}"
+            )
         fn_num = int(num_tok.value)
         if fn_num < 0 or fn_num > 99:
-            raise ParseError(f"Function number must be 0-99 at {num_tok.line}:{num_tok.col}")
+            raise ParseError(
+                f"Function number must be 0-99 at {num_tok.line}:{num_tok.col}"
+            )
         self._advance()
 
         body = self._parse_ops()
@@ -124,7 +130,9 @@ class Parser:
             self._advance()
             num_tok = self._current()
             if num_tok.kind not in ("NUM", "VAR"):
-                raise ParseError(f"Expected function number after '(' at {num_tok.line}:{num_tok.col}")
+                raise ParseError(
+                    f"Expected function number after '(' at {num_tok.line}:{num_tok.col}"
+                )
             fn_num = int(num_tok.value) if num_tok.kind == "NUM" else int(num_tok.value)
             self._advance()
             self._consume("ENDCALL", "Expected ')' after function number")
@@ -175,6 +183,24 @@ class Parser:
             "PRINTC": ("PRINTC", None),
             "INPUT": ("INPUT", None),
             "STORE": ("STORE", None),
+            "SIN": ("SIN", None),
+            "COS": ("COS", None),
+            "TAN": ("TAN", None),
+            "SQRT": ("SQRT", None),
+            "POW": ("POW", None),
+            "FLOOR": ("FLOOR", None),
+            "LOG": ("LOG", None),
+            "EXP": ("EXP", None),
+            "ABS": ("ABS", None),
+            "ATAN2": ("ATAN2", None),
+            "RAND": ("RAND", None),
+            "EXIT": ("EXIT", None),
+            "TIME": ("TIME", None),
+            "ALEN": ("ALEN", None),
+            "ALOAD": ("ALOAD", None),
+            "ASTORE": ("ASTORE", None),
+            "AINIT": ("AINIT", None),
+            "USLEEP": ("USLEEP", None),
         }
 
         if tok.kind in op_map:
@@ -201,5 +227,6 @@ class Parser:
 def from_source(source: str) -> Program:
     """Parse source string into Program."""
     from .lexer import Lexer
+
     tokens = Lexer(source).tokenize()
     return Parser(tokens).parse()
