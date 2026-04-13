@@ -1,0 +1,2 @@
+[console_scripts]
+sigic = sigi.main:main

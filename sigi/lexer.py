@@ -52,6 +52,24 @@ class Lexer:
     "text"  String literal
     'x      Character literal (no closing ')
     \\      End of line comment
+    S       SIN - pop a, push sin(a)
+    C       COS - pop a, push cos(a)
+    T       TAN - pop a, push tan(a)
+    R       SQRT - pop a, push sqrt(a)
+    P       POW - pop exp, pop base, push pow(base, exp)
+    F       FLOOR - pop a, push floor(a)
+    L       LOG - pop a, push log(a)
+    E       EXP - pop a, push exp(a)
+    M       ABS - pop a, push fabs(a)
+    N       ATAN2 - pop y, pop x, push atan2(y, x)
+    W       RAND - push random value 0.0-1.0
+    X       EXIT - pop code, exit program
+    Z       TIME - push current time in seconds
+    &       ALEN - pop arr_id, push array length
+    A       ALOAD - pop idx, pop arr_id → push array[idx]
+    a       ASTORE - pop val, pop idx, pop arr_id → array[idx] = val
+    _       AINIT - pop arr_id, pop size → initialize array
+    U       USLEEP - pop microseconds, sleep
 
     Tokens:
     NUM     - numeric value (from ! prefix)
@@ -107,7 +125,9 @@ class Lexer:
                 self._advance()
                 while True:
                     if self._current() is None:
-                        raise LexError(f"Unterminated block comment at {self.line}:{self.col}")
+                        raise LexError(
+                            f"Unterminated block comment at {self.line}:{self.col}"
+                        )
                     if self._current() == "*" and self._peek() == "/":
                         self._advance()
                         self._advance()
@@ -116,7 +136,9 @@ class Lexer:
             else:
                 break
 
-    def _read_number_after_first_digit(self, first_char: str, start_line: int, start_col: int) -> Token:
+    def _read_number_after_first_digit(
+        self, first_char: str, start_line: int, start_col: int
+    ) -> Token:
         """Read a number after the first digit has been consumed."""
         num_str = first_char
         has_dot = first_char == "."
@@ -214,6 +236,24 @@ class Lexer:
             "}": ("ENDB", "}"),
             ";": ("ELSE", ";"),
             "!": ("PUSH", "!"),
+            "S": ("SIN", "S"),
+            "C": ("COS", "C"),
+            "T": ("TAN", "T"),
+            "R": ("SQRT", "R"),
+            "P": ("POW", "P"),
+            "F": ("FLOOR", "F"),
+            "L": ("LOG", "L"),
+            "E": ("EXP", "E"),
+            "M": ("ABS", "M"),
+            "N": ("ATAN2", "N"),
+            "W": ("RAND", "W"),
+            "X": ("EXIT", "X"),
+            "Z": ("TIME", "Z"),
+            "&": ("ALEN", "&"),
+            "A": ("ALOAD", "A"),
+            "a": ("ASTORE", "a"),
+            "_": ("AINIT", "_"),
+            "U": ("USLEEP", "U"),
         }
 
         while True:
@@ -241,22 +281,34 @@ class Lexer:
                 self._advance()
                 self._skip_whitespace_and_comments()
                 first = self._current()
-                if first is None or not (first.isdigit() or first == "-" or first == "."):
-                    raise LexError(f"Expected number after '!' at {start_line}:{start_col}")
+                if first is None or not (
+                    first.isdigit() or first == "-" or first == "."
+                ):
+                    raise LexError(
+                        f"Expected number after '!' at {start_line}:{start_col}"
+                    )
                 if first == "-":
                     self._advance()
                     next_digit = self._current()
                     if next_digit is None or not next_digit.isdigit():
-                        raise LexError(f"Expected digit after '-' at {start_line}:{start_col}")
+                        raise LexError(
+                            f"Expected digit after '-' at {start_line}:{start_col}"
+                        )
                     self._advance()
-                    tok = self._read_number_after_first_digit(next_digit, start_line, start_col)
+                    tok = self._read_number_after_first_digit(
+                        next_digit, start_line, start_col
+                    )
                     tok.value = -abs(tok.value)
                 elif first == ".":
                     self._advance()
-                    tok = self._read_number_after_first_digit(first, start_line, start_col)
+                    tok = self._read_number_after_first_digit(
+                        first, start_line, start_col
+                    )
                 else:
                     self._advance()
-                    tok = self._read_number_after_first_digit(first, start_line, start_col)
+                    tok = self._read_number_after_first_digit(
+                        first, start_line, start_col
+                    )
                 tokens.append(tok)
                 continue
 

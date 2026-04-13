@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+sigi/__init__.py
+sigi/ast.py
+sigi/codegen_c.py
+sigi/lexer.py
+sigi/main.py
+sigi/parser.py
+sigi.egg-info/PKG-INFO
+sigi.egg-info/SOURCES.txt
+sigi.egg-info/dependency_links.txt
+sigi.egg-info/entry_points.txt
+sigi.egg-info/top_level.txt
