@@ -6,6 +6,8 @@ A pure symbolic stack language that compiles to C.
 
 All syntax is symbolic. No alphanumeric keywords.
 
+> 🧶 Also available on [Tangled](https://tangled.org/ewancroft.uk/sigi)
+
 ---
 
 ## Installation
