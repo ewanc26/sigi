@@ -1,6 +1,13 @@
-__pycache__/
-
-
-# Added by cargo
-
+# Cargo/Rust
 /target
+Cargo.lock
+
+# Editor/OS
+.DS_Store
+.vscode
+.idea
+
+# Build artifacts
+*.o
+*.out
+sigic
