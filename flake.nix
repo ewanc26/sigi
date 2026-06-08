@@ -13,14 +13,14 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              python3
-              python3Packages.pip
-              python3Packages.virtualenv
-              python3Packages.setuptools
+              rustc
+              cargo
+              gcc
+              pkg-config
             ];
 
             shellHook = ''
-              echo "sigi dev shell ready (Python 3 + setuptools)"
+              echo "sigi dev shell ready (Rust + GCC)"
             '';
           };
         }
