@@ -3,7 +3,7 @@ use std::str::Chars;
 use thiserror::Error;
 use crate::ast::SourceLocation;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum LexError {
     #[error("Unterminated string at {0:?}")]
     UnterminatedString(SourceLocation),
@@ -54,6 +54,7 @@ pub enum TokenValue {
     String(String),
 }
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     chars: Peekable<Chars<'a>>,
     line: usize,
