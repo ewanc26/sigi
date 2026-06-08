@@ -18,7 +18,14 @@ class Token:
 
 
 class LexError(Exception):
-    pass
+    def __init__(self, message: str, line: int, col: int):
+        self.message = message
+        self.line = line
+        self.col = col
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f"{self.message} at {self.line}:{self.col}"
 
 
 class Lexer:
@@ -126,7 +133,7 @@ class Lexer:
                 while True:
                     if self._current() is None:
                         raise LexError(
-                            f"Unterminated block comment at {self.line}:{self.col}"
+                            "Unterminated block comment", self.line, self.col
                         )
                     if self._current() == "*" and self._peek() == "/":
                         self._advance()
@@ -168,7 +175,7 @@ class Lexer:
         while True:
             ch = self._current()
             if ch is None:
-                raise LexError(f"Unterminated string at {start_line}:{start_col}")
+                raise LexError("Unterminated string", start_line, start_col)
             if ch == '"':
                 self._advance()
                 break
@@ -176,7 +183,7 @@ class Lexer:
                 self._advance()
                 esc = self._current()
                 if esc is None:
-                    raise LexError(f"Unterminated escape at {start_line}:{start_col}")
+                    raise LexError("Unterminated escape", start_line, start_col)
                 chars.append(escape_map.get(esc, esc))
                 self._advance()
             else:
@@ -190,13 +197,13 @@ class Lexer:
         self._advance()  # consume '
         ch = self._current()
         if ch is None:
-            raise LexError(f"Unterminated char at {start_line}:{start_col}")
+            raise LexError("Unterminated char", start_line, start_col)
 
         if ch == "\\":
             self._advance()
             esc = self._current()
             if esc is None:
-                raise LexError(f"Unterminated escape at {start_line}:{start_col}")
+                raise LexError("Unterminated escape", start_line, start_col)
             escape_map = {"n": "\n", "t": "\t", "r": "\r", "'": "'", "\\": "\\"}
             value = escape_map.get(esc, esc)
             self._advance()
@@ -276,6 +283,42 @@ class Lexer:
                 tokens.append(self._read_char())
                 continue
 
+            # Named store: :. followed by alphanumeric
+            if ch == ":" and self._peek() == ".":
+                self._advance()  # consume :
+                self._advance()  # consume .
+                name_str = ""
+                while True:
+                    next_ch = self._current()
+                    if next_ch and (next_ch.isalnum() or next_ch == "_"):
+                        name_str += self._advance()
+                    else:
+                        break
+                if not name_str:
+                    raise LexError("Expected name after ':.'", start_line, start_col)
+                tokens.append(Token("STORE_IDENT", name_str, start_line, start_col))
+                continue
+
+            # Named identifier: . followed by alphanumeric
+            if ch == ".":
+                self._advance()
+                name_str = ""
+                while True:
+                    next_ch = self._current()
+                    if next_ch and (next_ch.isalnum() or next_ch == "_"):
+                        name_str += self._advance()
+                    else:
+                        break
+
+                if not name_str:
+                    # Just a dot? Maybe it's a float start like .5
+                    # Wait, the number reader handles that if it's !.5
+                    # But what about . at top level?
+                    raise LexError("Expected name after '.'", start_line, start_col)
+
+                tokens.append(Token("IDENT", name_str, start_line, start_col))
+                continue
+
             # Push number: ! followed by digits
             if ch == "!":
                 self._advance()
@@ -284,15 +327,13 @@ class Lexer:
                 if first is None or not (
                     first.isdigit() or first == "-" or first == "."
                 ):
-                    raise LexError(
-                        f"Expected number after '!' at {start_line}:{start_col}"
-                    )
+                    raise LexError("Expected number after '!'", start_line, start_col)
                 if first == "-":
                     self._advance()
                     next_digit = self._current()
                     if next_digit is None or not next_digit.isdigit():
                         raise LexError(
-                            f"Expected digit after '-' at {start_line}:{start_col}"
+                            "Expected digit after '-'", start_line, start_col
                         )
                     self._advance()
                     tok = self._read_number_after_first_digit(
@@ -329,6 +370,6 @@ class Lexer:
                 tokens.append(Token(kind, val, start_line, start_col))
                 continue
 
-            raise LexError(f"Unexpected character {ch!r} at {start_line}:{start_col}")
+            raise LexError(f"Unexpected character {ch!r}", start_line, start_col)
 
         return tokens

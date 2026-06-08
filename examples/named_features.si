@@ -1,0 +1,21 @@
+\\\\ Named features in Sigi
+
+\\\\ Define a named function
+{ .greet
+    "Hello from .greet!\n"
+}
+
+\\\\ Call it
+( .greet )
+
+\\\\ Named variables
+!123 :.my_var
+.my_var |    \\\\ should print 123
+
+\\\\ Using them together
+{ .add_ten
+    !10 + :.my_var
+}
+
+!50 (.add_ten)
+.my_var |    \\\\ should print 60

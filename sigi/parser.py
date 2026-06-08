@@ -1,31 +1,25 @@
 """Sigi parser - symbolic stack language parser."""
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from .ast import Function, Op, Program
+from .ast import (BlockOp, CallOp, Function, IfElseOp, Op, Program, PushOp,
+                  SimpleOp, StoreNamedOp, StringOp, VarOp, WhileOp)
 from .lexer import LexError, Token
 
 
 class ParseError(Exception):
-    pass
+    def __init__(self, message: str, line: int, col: int):
+        self.message = message
+        self.line = line
+        self.col = col
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f"{self.message} at {self.line}:{self.col}"
 
 
 class Parser:
-    """
-    Sigi parser.
-
-    Grammar:
-        program   -> top_level* EOF
-        top_level -> function | op
-        function  -> BLOCK <number> ops ENDB
-        ops       -> op*
-        op        -> NUM | VAR | CALL NUM ENDCALL | CHAR | STRING
-                   | WHILE ops WEND | BLOCK ops else_part? ENDB
-                   | STORE | PRINT | PRINTC | INPUT | ELSE
-                   | DUP | SWAP | DROP | ADD | SUB | MUL | DIV | MOD
-                   | EQ | LT | GT | NOT | NEG | ABS | SQRT | ROUND
-        else_part -> ELSE ops
-    """
+    """Sigi parser."""
 
     def __init__(self, tokens: List[Token]):
         self.tokens = tokens
@@ -51,9 +45,8 @@ class Parser:
 
     def _consume(self, kind: str, msg: str) -> Token:
         if self._current().kind != kind:
-            raise ParseError(
-                f"{msg} at {self._current().line}:{self._current().col}; got {self._current().kind}"
-            )
+            tok = self._current()
+            raise ParseError(msg, tok.line, tok.col)
         return self._advance()
 
     def parse(self) -> Program:
@@ -62,9 +55,7 @@ class Parser:
         main_code: List[Op] = []
 
         while not self._match("EOF"):
-            # Check for function definition: BLOCK followed by VAR (digit)
-            # NOT NUM (which is from !N push syntax)
-            if self._match("BLOCK") and self._peek().kind == "VAR":
+            if self._match("BLOCK") and self._peek().kind in ("VAR", "IDENT"):
                 functions.append(self._parse_function())
                 continue
 
@@ -73,31 +64,33 @@ class Parser:
         return Program(functions, main_code)
 
     def _parse_function(self) -> Function:
-        """Parse a function definition: { N ops }"""
-        self._advance()  # consume BLOCK
+        """Parse a function definition: { N ops } or { .name ops }"""
+        tok = self._advance()  # consume BLOCK
+        line, col = tok.line, tok.col
 
-        # Get function number (can be VAR for 0-9, or NUM for larger)
         num_tok = self._current()
-        if num_tok.kind not in ("NUM", "VAR"):
+        if num_tok.kind not in ("NUM", "VAR", "IDENT"):
             raise ParseError(
-                f"Expected function number after '{{' at {num_tok.line}:{num_tok.col}"
+                "Expected function name or number after '{'", num_tok.line, num_tok.col
             )
-        fn_num = int(num_tok.value)
-        if fn_num < 0 or fn_num > 99:
-            raise ParseError(
-                f"Function number must be 0-99 at {num_tok.line}:{num_tok.col}"
-            )
+
+        name = num_tok.value
+        if num_tok.kind in ("NUM", "VAR"):
+            name = int(name)
+            if name < 0 or name > 99:
+                raise ParseError(
+                    "Function number must be 0-99", num_tok.line, num_tok.col
+                )
+
         self._advance()
 
         body = self._parse_ops()
-
         self._consume("ENDB", "Expected '}' to end function")
 
-        # Optionally consume stray ELSE after function def
         if self._match("ELSE"):
             self._advance()
 
-        return Function(fn_num, body)
+        return Function(name, body, line, col)
 
     def _parse_ops(self) -> List[Op]:
         """Parse a sequence of operations."""
@@ -110,107 +103,112 @@ class Parser:
         """Parse a single operation."""
         tok = self._current()
 
-        # Skip stray ELSE tokens at top level (they can appear after function defs)
         if tok.kind == "ELSE":
             self._advance()
-            return ("NOP", None)
+            return SimpleOp(line=tok.line, col=tok.col, kind="NOP")
 
-        # Push number
         if tok.kind == "NUM":
             self._advance()
-            return ("NUM", tok.value)
+            return PushOp(line=tok.line, col=tok.col, value=tok.value)
 
-        # Push variable value
         if tok.kind == "VAR":
             self._advance()
-            return ("VAR", float(tok.value))
+            return VarOp(line=tok.line, col=tok.col, name=int(tok.value))
 
-        # Function call: ( N )
+        if tok.kind == "IDENT":
+            self._advance()
+            return VarOp(line=tok.line, col=tok.col, name=tok.value)
+
+        if tok.kind == "STORE_IDENT":
+            self._advance()
+            return StoreNamedOp(line=tok.line, col=tok.col, name=tok.value)
+
         if tok.kind == "CALL":
             self._advance()
             num_tok = self._current()
-            if num_tok.kind not in ("NUM", "VAR"):
+            if num_tok.kind not in ("NUM", "VAR", "IDENT"):
                 raise ParseError(
-                    f"Expected function number after '(' at {num_tok.line}:{num_tok.col}"
+                    "Expected function name or number after '('",
+                    num_tok.line,
+                    num_tok.col,
                 )
-            fn_num = int(num_tok.value) if num_tok.kind == "NUM" else int(num_tok.value)
-            self._advance()
-            self._consume("ENDCALL", "Expected ')' after function number")
-            return ("CALL", float(fn_num))
 
-        # String literal
+            target = num_tok.value
+            if num_tok.kind in ("NUM", "VAR"):
+                target = int(target)
+
+            self._advance()
+            self._consume("ENDCALL", "Expected ')' after function identifier")
+            return CallOp(line=tok.line, col=tok.col, target=target)
+
         if tok.kind == "STRING":
             self._advance()
-            return ("STRING", tok.value)
+            return StringOp(line=tok.line, col=tok.col, value=tok.value)
 
-        # Character literal
         if tok.kind == "CHAR":
             self._advance()
-            return ("NUM", float(tok.value))
+            return PushOp(line=tok.line, col=tok.col, value=float(tok.value))
 
-        # While loop: [ ops ]
         if tok.kind == "WHILE":
             self._advance()
             body = self._parse_ops()
             self._consume("WEND", "Expected ']' to end while loop")
-            return ("WHILE", None, body)
+            return WhileOp(line=tok.line, col=tok.col, body=body)
 
-        # Block / If-Else: { ops } or { ops ; ops }
         if tok.kind == "BLOCK":
             return self._parse_block()
 
-        # Else shouldn't appear outside block
         if tok.kind == "ELSE":
-            raise ParseError(f"Unexpected ';' at {tok.line}:{tok.col}")
+            raise ParseError("Unexpected ';'", tok.line, tok.col)
 
         self._advance()
 
-        # Map single-char tokens to operations
         op_map = {
-            "DUP": ("DUP", None),
-            "SWAP": ("SWAP", None),
-            "DROP": ("DROP", None),
-            "ADD": ("ADD", None),
-            "SUB": ("SUB", None),
-            "MUL": ("MUL", None),
-            "DIV": ("DIV", None),
-            "MOD": ("MOD", None),
-            "EQ": ("EQ", None),
-            "LT": ("LT", None),
-            "GT": ("GT", None),
-            "NOT": ("NOT", None),
-            "PRINT": ("PRINT", None),
-            "PRINTC": ("PRINTC", None),
-            "INPUT": ("INPUT", None),
-            "STORE": ("STORE", None),
-            "SIN": ("SIN", None),
-            "COS": ("COS", None),
-            "TAN": ("TAN", None),
-            "SQRT": ("SQRT", None),
-            "POW": ("POW", None),
-            "FLOOR": ("FLOOR", None),
-            "LOG": ("LOG", None),
-            "EXP": ("EXP", None),
-            "ABS": ("ABS", None),
-            "ATAN2": ("ATAN2", None),
-            "RAND": ("RAND", None),
-            "EXIT": ("EXIT", None),
-            "TIME": ("TIME", None),
-            "ALEN": ("ALEN", None),
-            "ALOAD": ("ALOAD", None),
-            "ASTORE": ("ASTORE", None),
-            "AINIT": ("AINIT", None),
-            "USLEEP": ("USLEEP", None),
+            "DUP": "DUP",
+            "SWAP": "SWAP",
+            "DROP": "DROP",
+            "ADD": "ADD",
+            "SUB": "SUB",
+            "MUL": "MUL",
+            "DIV": "DIV",
+            "MOD": "MOD",
+            "EQ": "EQ",
+            "LT": "LT",
+            "GT": "GT",
+            "NOT": "NOT",
+            "PRINT": "PRINT",
+            "PRINTC": "PRINTC",
+            "INPUT": "INPUT",
+            "STORE": "STORE",
+            "SIN": "SIN",
+            "COS": "COS",
+            "TAN": "TAN",
+            "SQRT": "SQRT",
+            "POW": "POW",
+            "FLOOR": "FLOOR",
+            "LOG": "LOG",
+            "EXP": "EXP",
+            "ABS": "ABS",
+            "ATAN2": "ATAN2",
+            "RAND": "RAND",
+            "EXIT": "EXIT",
+            "TIME": "TIME",
+            "ALEN": "ALEN",
+            "ALOAD": "ALOAD",
+            "ASTORE": "ASTORE",
+            "AINIT": "AINIT",
+            "USLEEP": "USLEEP",
         }
 
         if tok.kind in op_map:
-            return op_map[tok.kind]
+            return SimpleOp(line=tok.line, col=tok.col, kind=op_map[tok.kind])
 
-        raise ParseError(f"Unexpected token {tok.kind} at {tok.line}:{tok.col}")
+        raise ParseError(f"Unexpected token {tok.kind}", tok.line, tok.col)
 
-    def _parse_block(self) -> Tuple[str, None, List[Op], List[Op]]:
+    def _parse_block(self) -> Op:
         """Parse a block with optional else: { ops } or { ops ; ops }"""
-        self._advance()  # consume BLOCK
+        tok = self._advance()  # consume BLOCK
+        line, col = tok.line, tok.col
 
         then_ops = self._parse_ops()
 
@@ -218,10 +216,10 @@ class Parser:
             self._advance()
             else_ops = self._parse_ops()
             self._consume("ENDB", "Expected '}' after else block")
-            return ("IFELSE", None, then_ops, else_ops)
+            return IfElseOp(line=line, col=col, then_body=then_ops, else_body=else_ops)
         else:
             self._consume("ENDB", "Expected '}' to end block")
-            return ("BLOCK", None, then_ops)
+            return BlockOp(line=line, col=col, body=then_ops)
 
 
 def from_source(source: str) -> Program:

@@ -1,12 +1,21 @@
 """Sigi C code generator."""
 
-from typing import List
+import re
+from typing import List, Set, Union
 
-from .ast import Function, Op, Program
+from .ast import (BlockOp, CallOp, Function, IfElseOp, Op, Program, PushOp,
+                  SimpleOp, StoreNamedOp, StringOp, VarOp, WhileOp)
 
 
 class CodegenError(Exception):
     pass
+
+
+def _c_ident(name: Union[int, str]) -> str:
+    """Convert Sigi identifier to safe C identifier."""
+    if isinstance(name, int):
+        return f"{name}"
+    return re.sub(r"\W+", "_", name)
 
 
 def generate_c(program: Program) -> str:
@@ -26,6 +35,27 @@ def generate_c(program: Program) -> str:
     lines.append("static double stack[STACK_SIZE];")
     lines.append("static int sp = 0;")
     lines.append("static double vars[100];")
+
+    # Collect all named variables
+    named_vars: Set[str] = set()
+
+    def collect_vars(ops: List[Op]):
+        for op in ops:
+            if isinstance(op, (VarOp, StoreNamedOp)) and isinstance(op.name, str):
+                named_vars.add(op.name)
+            elif isinstance(op, (WhileOp, BlockOp)):
+                collect_vars(op.body)
+            elif isinstance(op, IfElseOp):
+                collect_vars(op.then_body)
+                collect_vars(op.else_body)
+
+    collect_vars(program.main_code)
+    for fn in program.functions:
+        collect_vars(fn.body)
+
+    for name in sorted(named_vars):
+        lines.append(f"static double var_{_c_ident(name)} = 0;")
+
     lines.append("static double *arrays[MAX_ARRAYS];")
     lines.append("static int array_sizes[MAX_ARRAYS];")
     lines.append("")
@@ -52,12 +82,12 @@ def generate_c(program: Program) -> str:
 
     # Forward declare functions
     for fn in program.functions:
-        lines.append(f"static void func_{fn.number}(void);")
+        lines.append(f"static void func_{_c_ident(fn.name)}(void);")
     lines.append("")
 
     # Function definitions
     for fn in program.functions:
-        lines.append(f"static void func_{fn.number}(void) {{")
+        lines.append(f"static void func_{_c_ident(fn.name)}(void) {{")
         for op in fn.body:
             lines.extend(_codegen_op(op, indent=1))
         lines.append("}")
@@ -77,115 +107,98 @@ def generate_c(program: Program) -> str:
 def _codegen_op(op: Op, indent: int = 0) -> List[str]:
     """Generate C code for a single operation."""
     prefix = "    " * indent
-    code, value = op[0], op[1] if len(op) > 1 else None
     lines = []
 
-    # Simple push
-    if code == "NUM":
-        if op[1] == int(op[1]):
-            lines.append(f"{prefix}push({int(op[1])});")
+    if isinstance(op, PushOp):
+        if op.value == int(op.value):
+            lines.append(f"{prefix}push({int(op.value)});")
         else:
-            lines.append(f"{prefix}push({op[1]});")
+            lines.append(f"{prefix}push({op.value});")
         return lines
 
-    # Variable load (digits 0-99)
-    if code == "VAR":
-        lines.append(f"{prefix}push(vars[{int(value)}]);")
+    if isinstance(op, VarOp):
+        if isinstance(op.name, int):
+            lines.append(f"{prefix}push(vars[{op.name}]);")
+        else:
+            lines.append(f"{prefix}push(var_{_c_ident(op.name)});")
         return lines
 
-    # String literal
-    if code == "STRING":
-        s = value
-        for ch in s:
+    if isinstance(op, StoreNamedOp):
+        lines.append(f"{prefix}var_{_c_ident(op.name)} = pop();")
+        return lines
+
+    if isinstance(op, StringOp):
+        for ch in op.value:
             lines.append(f"{prefix}putchar({ord(ch)});")
         return lines
 
-    # Function call
-    if code == "CALL":
-        lines.append(f"{prefix}func_{int(value)}();")
+    if isinstance(op, CallOp):
+        lines.append(f"{prefix}func_{_c_ident(op.target)}();")
         return lines
 
-    # While loop [ body ]
-    # Semantics: peek at stack top. If zero or empty, exit. Otherwise execute body.
-    # Body has access to stack (counter on top). Body MUST push condition for next iteration.
-    if code == "WHILE":
-        body = op[2] if len(op) > 2 else []
+    if isinstance(op, WhileOp):
         lines.append(f"{prefix}while (1) {{")
         lines.append(f"{prefix}    if (sp <= 0) break;")
         lines.append(f"{prefix}    double _cond = stack[sp - 1];")
         lines.append(f"{prefix}    if (_cond == 0.0) break;")
-        # Don't pop! Body has access to stack top as loop counter
-        for body_op in body:
+        for body_op in op.body:
             lines.extend(_codegen_op(body_op, indent + 1))
         lines.append(f"{prefix}}}")
         return lines
 
-    # Block / If-Else
-    if code == "BLOCK":
-        then_ops = op[2] if len(op) > 2 else []
+    if isinstance(op, BlockOp):
         lines.append(f"{prefix}{{")
-        for body_op in then_ops:
+        for body_op in op.body:
             lines.extend(_codegen_op(body_op, indent + 1))
         lines.append(f"{prefix}}}")
         return lines
 
-    if code == "IFELSE":
-        then_ops = op[2] if len(op) > 2 else []
-        else_ops = op[3] if len(op) > 3 else []
+    if isinstance(op, IfElseOp):
         lines.append(f"{prefix}{{")
         lines.append(f"{prefix}    double _cond = pop();")
         lines.append(f"{prefix}    if (_cond != 0.0) {{")
-        for body_op in then_ops:
+        for body_op in op.then_body:
             lines.extend(_codegen_op(body_op, indent + 2))
         lines.append(f"{prefix}    }} else {{")
-        for body_op in else_ops:
+        for body_op in op.else_body:
             lines.extend(_codegen_op(body_op, indent + 2))
         lines.append(f"{prefix}    }}")
         lines.append(f"{prefix}}}")
         return lines
 
+    if not isinstance(op, SimpleOp):
+        raise CodegenError(f"Unexpected AST node: {type(op)}")
+
+    code = op.kind
+
     # Binary operations
-    binops = {
-        "ADD": "+",
-        "SUB": "-",
-        "MUL": "*",
-        "DIV": "/",
-    }
+    binops = {"ADD": "+", "SUB": "-", "MUL": "*", "DIV": "/"}
     if code in binops:
         lines.append(
             f"{prefix}{{ double b = pop(); double a = pop(); push(a {binops[code]} b); }}"
         )
         return lines
 
-    # Modulo (fmod)
     if code == "MOD":
         lines.append(
             f"{prefix}{{ double b = pop(); double a = pop(); push(fmod(a, b)); }}"
         )
         return lines
 
-    # Comparisons
-    comparisons = {
-        "EQ": "==",
-        "LT": "<",
-        "GT": ">",
-    }
+    comparisons = {"EQ": "==", "LT": "<", "GT": ">"}
     if code in comparisons:
         lines.append(
             f"{prefix}{{ double b = pop(); double a = pop(); push((a {comparisons[code]} b) ? 1.0 : 0.0); }}"
         )
         return lines
 
-    # No-op
     if code == "NOP":
         return lines
 
-    # Unary operations
     if code == "NOT":
         lines.append(f"{prefix}push((pop() == 0.0) ? 1.0 : 0.0);")
         return lines
 
-    # Stack operations
     if code == "DUP":
         lines.append(f"{prefix}{{ double x = stack[sp - 1]; push(x); }}")
         return lines
@@ -200,43 +213,25 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         lines.append(f"{prefix}(void)pop();")
         return lines
 
-    # Trig functions
-    if code == "SIN":
-        lines.append(f"{prefix}push(sin(pop()));")
-        return lines
-
-    if code == "COS":
-        lines.append(f"{prefix}push(cos(pop()));")
-        return lines
-
-    if code == "TAN":
-        lines.append(f"{prefix}push(tan(pop()));")
-        return lines
-
-    if code == "SQRT":
-        lines.append(f"{prefix}push(sqrt(pop()));")
+    # Functions
+    math_fns = {
+        "SIN": "sin",
+        "COS": "cos",
+        "TAN": "tan",
+        "SQRT": "sqrt",
+        "FLOOR": "floor",
+        "LOG": "log",
+        "EXP": "exp",
+        "ABS": "fabs",
+    }
+    if code in math_fns:
+        lines.append(f"{prefix}push({math_fns[code]}(pop()));")
         return lines
 
     if code == "POW":
         lines.append(
             f"{prefix}{{ double e = pop(); double b = pop(); push(pow(b, e)); }}"
         )
-        return lines
-
-    if code == "FLOOR":
-        lines.append(f"{prefix}push(floor(pop()));")
-        return lines
-
-    if code == "LOG":
-        lines.append(f"{prefix}push(log(pop()));")
-        return lines
-
-    if code == "EXP":
-        lines.append(f"{prefix}push(exp(pop()));")
-        return lines
-
-    if code == "ABS":
-        lines.append(f"{prefix}push(fabs(pop()));")
         return lines
 
     if code == "ATAN2":
@@ -257,7 +252,6 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         lines.append(f"{prefix}push((double)time(NULL));")
         return lines
 
-    # Array operations
     if code == "ALEN":
         lines.append(f"{prefix}{{ int id = (int)pop(); push(array_sizes[id]); }}")
         return lines
@@ -284,7 +278,6 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         lines.append(f"{prefix}usleep((useconds_t)pop());")
         return lines
 
-    # I/O
     if code == "PRINT":
         lines.append(f'{prefix}printf("%g\\n", pop());')
         return lines
@@ -297,11 +290,10 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         lines.append(f'{prefix}{{ double x; scanf("%lf", &x); push(x); }}')
         return lines
 
-    # Variable store
     if code == "STORE":
         lines.append(
             f"{prefix}{{ int idx = (int)pop(); double val = pop(); vars[idx] = val; }}"
         )
         return lines
 
-    raise CodegenError(f"Unknown opcode: {code}")
+    raise CodegenError(f"Unknown opcode kind: {code}")

@@ -1,10 +1,10 @@
 # Sigi
 
-A pure symbolic stack language that compiles to C.
+A pure symbolic stack language that compiles to C or can be interpreted.
 
 **Character set**: `!@#$%^&*()-+=[]{}|;:'",.<>/?\~` plus digits `0-9`
 
-All syntax is symbolic. No alphanumeric keywords.
+All syntax is symbolic. No alphanumeric keywords. User-defined names are prefixed with `.`.
 
 > 🧶 Also available on [Tangled](https://tangled.org/ewancroft.uk/sigi)
 
@@ -23,16 +23,20 @@ This installs the `sigic` compiler.
 ## Usage
 
 ```sh
+# Start interactive REPL
+sigic
+
 # Compile to C
 sigic hello.si -o hello.c
 
 # Compile and run immediately
 sigic hello.si --run
 
-# Debug: show tokens
-sigic hello.si --emit-tokens
+# Run using the reference interpreter (faster startup)
+sigic hello.si --interpret
 
-# Debug: show AST
+# Debug: show tokens or AST
+sigic hello.si --emit-tokens
 sigic hello.si --emit-ast
 ```
 
@@ -59,14 +63,19 @@ sigic hello.si --emit-ast
 | `^` | PRINTC | Pop and print as character |
 | `?` | INPUT | Read number from stdin |
 | `:` | STORE | Pop address, pop value → store to var |
+| `:.name`| STOREN | Pop value → store to named variable |
+| `.name` | LOADN | Push value of named variable or call function |
 | `<n>` | LOAD | Push value of variable n (digits 0-99) |
 | `[ body ]` | WHILE | Loop while stack top is nonzero |
 | `{ then ; else }` | IF-ELSE | Pop condition, execute then or else |
 | `{N body }` | FUNC | Define function N (0-99) |
+| `{.name body }`| FUNCN | Define named function |
 | `(N)` | CALL | Call function N |
+| `(.name)`| CALLN | Call named function |
 | `"text"` | STRING | Print characters |
 | `'x` | CHAR | Push character code |
 | `\\` | COMMENT | Line comment |
+| `/* body */` | BLOCK COMMENT | Multi-line comment |
 | `S` | SIN | Pop a → push sin(a) |
 | `C` | COS | Pop a → push cos(a) |
 | `T` | TAN | Pop a → push tan(a) |
@@ -87,7 +96,28 @@ sigic hello.si --emit-ast
 
 ---
 
+## Robustness Features
+
+Sigi includes several features for reliable development:
+
+- **Static Analysis**: The compiler checks for undefined function calls and redefinitions before starting compilation or interpretation.
+- **Detailed Error Reporting**: All errors (Lex, Parse, Semantic, Runtime) include line and column information, along with a source snippet and pointer.
+- **Reference Interpreter**: Provides a second implementation to verify compiler behavior and enables a fast interactive workflow.
+- **Automated Test Suite**: A comprehensive set of tests ensures that all features and examples remain functional.
+
+---
+
 ## Examples
+
+### Named Identifiers
+
+```
+{.greet "Hello!\n"}
+(.greet)
+
+!42 :.answer
+.answer |  \\ prints 42
+```
 
 ### Hello World
 
@@ -108,66 +138,6 @@ sigic hello.si --emit-ast
 ```
 !5 @ + |      \ 10 (DUP + ADD)
 !1 !2 # | |   \ 2 1 (SWAP)
-```
-
-### Variables
-
-```
-!42 !0 :       \ store 42 in var 0
-0 |            \ print 42
-```
-
-### Functions
-
-```
-{0 "Hi\n"}     \ define fn 0
-{1 !42 |}      \ define fn 1
-(0)            \ call fn 0
-(1)            \ call fn 1
-```
-
-### Control flow
-
-```
-!1 { "yes" ; "no" }    \ prints "yes"
-!0 { "yes" ; "no" }    \ prints "no"
-```
-
-### While loops
-
-```
-!5 [ @ | !1 - ] $      \\ prints 5 4 3 2 1
-```
-
-### Trigonometry
-
-```
-!0 S |                 \\ prints 0 (sin(0))
-!1.570796 S |          \\ prints 1 (sin(π/2))
-!0 C |                 \\ prints 1 (cos(0))
-```
-
-### Arrays
-
-```
-!100 !0 _              \\ initialize array 0 with 100 elements
-!42 !0 !5 a            \\ array[5] = 42
-!0 !5 A |              \\ prints 42 (array[5])
-```
-
-### Math functions
-
-```
-!2 R |                 \\ prints 1.414... (sqrt(2))
-!2 !3 P |              \\ prints 8 (2^3)
-!-5 M |                \\ prints 5 (abs)
-W |                    \\ prints random 0.0-1.0
-```
-
-### Timed animation
-
-```
-!1000000 U             \\ sleep for 1 second
 ```
 
 ---
