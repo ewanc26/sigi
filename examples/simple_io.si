@@ -1,0 +1,5 @@
+\\\\ Simple file I/O test
+\\\\ Open "a.txt" for write (mode 1)
+\\\\ Order: !chars !path_len !mode O
+!97 !46 !116 !120 !116 !5 !1 O :.my_fd
+.my_fd Y

@@ -90,6 +90,11 @@ sigic hello.si --emit-ast
 | `X` | EXIT | Pop code → exit program |
 | `Z` | TIME | Push current time in seconds |
 | `_` | AINIT | Pop id, pop size → initialize array |
+| `K` | AFREE | Pop id → free array |
+| `O` | FILE_OPEN | Pop mode, pop len, pop chars → fd |
+| `G` | FILE_READ | Pop fd, pop size → push bytes, read_len |
+| `H` | FILE_WRITE | Pop fd, pop size, pop data → bytes_written |
+| `Y` | FILE_CLOSE | Pop fd → close |
 | `A` | ALOAD | Pop idx, pop id → push array[idx] |
 | `a` | ASTORE | Pop idx, pop id, pop val → array[idx] = val |
 | `U` | USLEEP | Pop microseconds → sleep |
@@ -104,6 +109,7 @@ Sigi includes several features for reliable development:
 - **Detailed Error Reporting**: All errors (Lex, Parse, Semantic, Runtime) include line and column information, along with a source snippet and pointer.
 - **Reference Interpreter**: Provides a second implementation to verify compiler behavior and enables a fast interactive workflow.
 - **Automated Test Suite**: A comprehensive set of tests ensures that all features and examples remain functional.
+- **System-Level Operations**: Supports explicit memory management for arrays and basic file I/O operations for real-world tasks.
 
 ---
 
@@ -119,25 +125,12 @@ Sigi includes several features for reliable development:
 .answer |  \\ prints 42
 ```
 
-### Hello World
+### File I/O
 
 ```
-"Hello, World!\n"
-```
-
-### Arithmetic
-
-```
-!3 !4 + |     \ prints 7
-!10 !3 - |    \ prints 7
-!4 !5 * |     \ prints 20
-```
-
-### Stack operations
-
-```
-!5 @ + |      \ 10 (DUP + ADD)
-!1 !2 # | |   \ 2 1 (SWAP)
+!116 !101 !115 !116 !46 !116 !120 !116 !8 !1 O :.my_fd
+!116 !101 !115 !116 !4 .my_fd H $
+.my_fd Y
 ```
 
 ---

@@ -30,6 +30,7 @@ class Interpreter:
         self.stack: List[float] = []
         self.vars: Dict[Union[int, str], float] = {i: 0.0 for i in range(100)}
         self.arrays: Dict[int, List[float]] = {}
+        self.files: Dict[int, object] = {} # Will store file objects
         self.functions: Dict[Union[int, str], Function] = {}
         if program:
             for fn in program.functions:
@@ -198,6 +199,39 @@ class Interpreter:
             id = int(self.pop(op))
             if id in self.arrays:
                 del self.arrays[id]
+        elif kind == "FILE_OPEN":
+            mode = int(self.pop(op))
+            path_len = int(self.pop(op))
+            path_chars = [int(self.pop(op)) for _ in range(path_len)]
+            path = "".join(chr(c) for c in path_chars)
+            mode_str = "r" if mode == 0 else "w"
+            f = open(path, mode_str)
+            fd = f.fileno()
+            self.files[fd] = f
+            self.push(float(fd))
+        elif kind == "FILE_READ":
+            fd = int(self.pop(op))
+            size = int(self.pop(op))
+            f = self.files.get(fd)
+            if not f: raise RuntimeError("Invalid file descriptor", op.line, op.col)
+            data = f.read(size)
+            for ch in reversed(data):
+                self.push(float(ord(ch)))
+            self.push(float(len(data)))
+        elif kind == "FILE_WRITE":
+            fd = int(self.pop(op))
+            size = int(self.pop(op))
+            data = "".join(chr(int(self.pop(op))) for _ in range(size))
+            f = self.files.get(fd)
+            if not f: raise RuntimeError("Invalid file descriptor", op.line, op.col)
+            f.write(data)
+            self.push(float(size))
+        elif kind == "FILE_CLOSE":
+            fd = int(self.pop(op))
+            f = self.files.get(fd)
+            if not f: raise RuntimeError("Invalid file descriptor", op.line, op.col)
+            f.close()
+            del self.files[fd]
         elif kind == "USLEEP":
             time.sleep(self.pop(op) / 1000000.0)
         elif kind == "NOP":

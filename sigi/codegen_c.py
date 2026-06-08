@@ -283,6 +283,22 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         lines.append(f"{prefix}{{ int id = (int)pop(); arr_free(id); }}")
         return lines
 
+    if code == "FILE_OPEN":
+        lines.append(f"{prefix}{{ int mode = (int)pop(); int len = (int)pop(); char *path = (char *)malloc(len + 1); for (int i = 0; i < len; i++) path[i] = (char)pop(); path[len] = '\\0'; FILE *f = fopen(path, mode == 0 ? \"r\" : \"w\"); free(path); push((double)fileno(f)); }}")
+        return lines
+    
+    if code == "FILE_READ":
+        lines.append(f"{prefix}{{ int fd = (int)pop(); int size = (int)pop(); char *buf = (char *)malloc(size); FILE *f = fdopen(fd, \"r\"); int n = fread(buf, 1, size, f); for (int i = n - 1; i >= 0; i--) push((double)buf[i]); push((double)n); free(buf); }}")
+        return lines
+
+    if code == "FILE_WRITE":
+        lines.append(f"{prefix}{{ int fd = (int)pop(); int size = (int)pop(); char *buf = (char *)malloc(size); for (int i = size - 1; i >= 0; i--) buf[i] = (char)pop(); FILE *f = fdopen(fd, \"w\"); int n = fwrite(buf, 1, size, f); push((double)n); free(buf); }}")
+        return lines
+
+    if code == "FILE_CLOSE":
+        lines.append(f"{prefix}{{ int fd = (int)pop(); FILE *f = fdopen(fd, \"r\"); fclose(f); }}")
+        return lines
+
     if code == "USLEEP":
 
         lines.append(f"{prefix}usleep((useconds_t)pop());")

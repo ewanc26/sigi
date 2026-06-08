@@ -207,9 +207,9 @@ class Parser:
             "EXIT": "EXIT",
             "TIME": "TIME",
             "ALEN": "ALEN", "ALOAD": "ALOAD", "ASTORE": "ASTORE", "AINIT": "AINIT",
-            "AFREE": "AFREE", "USLEEP": "USLEEP",
+            "AFREE": "AFREE", "FILE_OPEN": "FILE_OPEN", "FILE_READ": "FILE_READ",
+            "FILE_WRITE": "FILE_WRITE", "FILE_CLOSE": "FILE_CLOSE", "USLEEP": "USLEEP",
             }
-
 
         if tok.kind in op_map:
             return SimpleOp(line=tok.line, col=tok.col, kind=op_map[tok.kind])

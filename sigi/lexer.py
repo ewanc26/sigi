@@ -261,6 +261,10 @@ class Lexer:
             "a": ("ASTORE", "a"),
             "_": ("AINIT", "_"),
             "K": ("AFREE", "K"),
+            "O": ("FILE_OPEN", "O"),
+            "G": ("FILE_READ", "G"),
+            "H": ("FILE_WRITE", "H"),
+            "Y": ("FILE_CLOSE", "Y"),
             "U": ("USLEEP", "U"),
         }
 

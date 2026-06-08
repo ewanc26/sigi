@@ -1,0 +1,18 @@
+\\\\ File I/O in Sigi
+\\\\ !path_chars !path_len !mode O -> fd
+\\\\ !len !fd R -> !bytes !len (the read data)
+\\\\ !len !fd !data W -> !bytes_written
+\\\\ !fd C -> close
+
+\\\\ Write to file "test.txt"
+\\\\ "test.txt" = 8 chars
+!116 !101 !115 !116 !46 !116 !120 !116 !8 !1 O :.my_fd
+\\\\ "test" = 4 chars
+!116 !101 !115 !116 !4 .my_fd H $  \\\\ drop bytes_written
+.my_fd Y
+
+\\\\ Read from file
+!116 !101 !115 !116 !46 !116 !120 !116 !8 !0 O :.my_fd
+!4 .my_fd G $                      \\\\ drop bytes_read
+^ ^ ^ ^
+.my_fd Y
