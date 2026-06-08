@@ -87,7 +87,7 @@ impl<'a> Lexer<'a> {
     fn current_loc(&self) -> SourceLocation {
         SourceLocation { line: self.line, col: self.col }
     }
-    
+
     fn skip_whitespace_and_comments(&mut self) -> Result<(), LexError> {
         while let Some(ch) = self.peek() {
             if ch.is_whitespace() || ch == ',' {
@@ -123,7 +123,7 @@ impl<'a> Lexer<'a> {
 
     pub fn next_token(&mut self) -> Result<Token, LexError> {
         self.skip_whitespace_and_comments()?;
-        
+
         let loc = self.current_loc();
         let ch = match self.advance() {
             Some(c) => c,
@@ -147,7 +147,7 @@ impl<'a> Lexer<'a> {
             _ => self.read_symbol(ch, loc),
         }
     }
-    
+
     fn read_string(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut chars = String::new();
         while let Some(ch) = self.advance() {
@@ -186,20 +186,20 @@ impl<'a> Lexer<'a> {
         if !first.is_ascii_digit() && first != '-' && first != '.' {
              return Err(LexError::ExpectedNumber(loc));
         }
-        
+
         let mut num_str = String::new();
         if first == '-' {
             num_str.push(self.advance().unwrap());
             let next = self.peek().ok_or(LexError::ExpectedDigit(loc))?;
             if !next.is_ascii_digit() { return Err(LexError::ExpectedDigit(loc)); }
         }
-        
+
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '.' {
                 num_str.push(self.advance().unwrap());
             } else { break; }
         }
-        
+
         let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
         Ok(Token { kind: TokenKind::NUM, value: Some(TokenValue::Num(val)), loc })
     }
@@ -213,18 +213,19 @@ impl<'a> Lexer<'a> {
         }
         if name.is_empty() { return Err(LexError::ExpectedName(".".to_string(), loc)); }
         Ok(Token { kind: TokenKind::IDENT, value: Some(TokenValue::Ident(name)), loc })
-        }
+    }
 
-        fn read_store_ident(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
+    fn read_store_ident(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut name = String::new();
         while let Some(c) = self.peek() {
-        if c.is_alphanumeric() || c == '_' {
-        name.push(self.advance().unwrap());
-        } else { break; }
+            if c.is_alphanumeric() || c == '_' {
+                name.push(self.advance().unwrap());
+            } else { break; }
         }
         if name.is_empty() { return Err(LexError::ExpectedName(":.".to_string(), loc)); }
         Ok(Token { kind: TokenKind::StoreIdent, value: Some(TokenValue::Ident(name)), loc })
-        }
+    }
+
     fn read_var(&mut self, first: char, loc: SourceLocation) -> Result<Token, LexError> {
         let mut num_str = first.to_string();
         while let Some(c) = self.peek() {
@@ -259,6 +260,24 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind, value: None, loc })
     }
 }
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Result<Token, LexError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next_token() {
+            Ok(token) => {
+                if token.kind == TokenKind::EOF {
+                    None
+                } else {
+                    Some(Ok(token))
+                }
+            }
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
