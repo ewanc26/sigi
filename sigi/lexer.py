@@ -260,6 +260,7 @@ class Lexer:
             "A": ("ALOAD", "A"),
             "a": ("ASTORE", "a"),
             "_": ("AINIT", "_"),
+            "K": ("AFREE", "K"),
             "U": ("USLEEP", "U"),
         }
 

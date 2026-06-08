@@ -67,6 +67,13 @@ def generate_c(program: Program) -> str:
     lines.append("    array_sizes[id] = size;")
     lines.append("}")
     lines.append("")
+    lines.append("static void arr_free(int id) {")
+    lines.append(
+        '    if (id < 0 || id >= MAX_ARRAYS) { fprintf(stderr, "Array ID out of range\\n"); exit(1); }'
+    )
+    lines.append("    if (arrays[id]) { free(arrays[id]); arrays[id] = NULL; array_sizes[id] = 0; }")
+    lines.append("}")
+    lines.append("")
     lines.append("static void push(double x) {")
     lines.append(
         '    if (sp >= STACK_SIZE) { fprintf(stderr, "Stack overflow\\n"); exit(1); }'
@@ -269,12 +276,15 @@ def _codegen_op(op: Op, indent: int = 0) -> List[str]:
         return lines
 
     if code == "AINIT":
-        lines.append(
-            f"{prefix}{{ int id = (int)pop(); int size = (int)pop(); arr_init(id, size); }}"
-        )
+        lines.append(f"{prefix}{{ int id = (int)pop(); int size = (int)pop(); arr_init(id, size); }}")
+        return lines
+
+    if code == "AFREE":
+        lines.append(f"{prefix}{{ int id = (int)pop(); arr_free(id); }}")
         return lines
 
     if code == "USLEEP":
+
         lines.append(f"{prefix}usleep((useconds_t)pop());")
         return lines
 

@@ -194,6 +194,10 @@ class Interpreter:
         elif kind == "AINIT":
             id, size = int(self.pop(op)), int(self.pop(op))
             self.arrays[id] = [0.0] * size
+        elif kind == "AFREE":
+            id = int(self.pop(op))
+            if id in self.arrays:
+                del self.arrays[id]
         elif kind == "USLEEP":
             time.sleep(self.pop(op) / 1000000.0)
         elif kind == "NOP":

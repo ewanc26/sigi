@@ -36,6 +36,11 @@ class StoreNamedOp(Op):
 
 
 @dataclass
+class AFreeOp(Op):
+    pass
+
+
+@dataclass
 class StringOp(Op):
     value: str
 

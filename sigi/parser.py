@@ -2,8 +2,21 @@
 
 from typing import List, Optional
 
-from .ast import (BlockOp, CallOp, Function, IfElseOp, Op, Program, PushOp,
-                  SimpleOp, StoreNamedOp, StringOp, VarOp, WhileOp)
+from .ast import (
+    AFreeOp,
+    BlockOp,
+    CallOp,
+    Function,
+    IfElseOp,
+    Op,
+    Program,
+    PushOp,
+    SimpleOp,
+    StoreNamedOp,
+    StringOp,
+    VarOp,
+    WhileOp,
+)
 from .lexer import LexError, Token
 
 
@@ -193,12 +206,10 @@ class Parser:
             "RAND": "RAND",
             "EXIT": "EXIT",
             "TIME": "TIME",
-            "ALEN": "ALEN",
-            "ALOAD": "ALOAD",
-            "ASTORE": "ASTORE",
-            "AINIT": "AINIT",
-            "USLEEP": "USLEEP",
-        }
+            "ALEN": "ALEN", "ALOAD": "ALOAD", "ASTORE": "ASTORE", "AINIT": "AINIT",
+            "AFREE": "AFREE", "USLEEP": "USLEEP",
+            }
+
 
         if tok.kind in op_map:
             return SimpleOp(line=tok.line, col=tok.col, kind=op_map[tok.kind])
