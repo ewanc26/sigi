@@ -25,7 +25,7 @@ pub enum LexError {
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum TokenKind {
-    NUM, VAR, IDENT, STORE_IDENT, CHAR, STRING,
+    NUM, VAR, IDENT, StoreIdent, CHAR, STRING,
     BLOCK, ENDB, ELSE, WHILE, WEND, CALL, ENDCALL,
     DUP, SWAP, DROP, ADD, SUB, MUL, DIV, MOD,
     EQ, LT, GT, NOT,
@@ -33,7 +33,7 @@ pub enum TokenKind {
     SIN, COS, TAN, SQRT, POW, FLOOR, LOG, EXP, ABS, ATAN2,
     RAND, EXIT, TIME,
     ALEN, ALOAD, ASTORE, AINIT, AFREE,
-    FILE_OPEN, FILE_READ, FILE_WRITE, FILE_CLOSE,
+    FileOpen, FileRead, FileWrite, FileClose,
     USLEEP,
     EOF,
 }
@@ -213,19 +213,18 @@ impl<'a> Lexer<'a> {
         }
         if name.is_empty() { return Err(LexError::ExpectedName(".".to_string(), loc)); }
         Ok(Token { kind: TokenKind::IDENT, value: Some(TokenValue::Ident(name)), loc })
-    }
+        }
 
-    fn read_store_ident(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
+        fn read_store_ident(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut name = String::new();
         while let Some(c) = self.peek() {
-            if c.is_alphanumeric() || c == '_' {
-                name.push(self.advance().unwrap());
-            } else { break; }
+        if c.is_alphanumeric() || c == '_' {
+        name.push(self.advance().unwrap());
+        } else { break; }
         }
         if name.is_empty() { return Err(LexError::ExpectedName(":.".to_string(), loc)); }
-        Ok(Token { kind: TokenKind::STORE_IDENT, value: Some(TokenValue::Ident(name)), loc })
-    }
-
+        Ok(Token { kind: TokenKind::StoreIdent, value: Some(TokenValue::Ident(name)), loc })
+        }
     fn read_var(&mut self, first: char, loc: SourceLocation) -> Result<Token, LexError> {
         let mut num_str = first.to_string();
         while let Some(c) = self.peek() {
@@ -252,8 +251,8 @@ impl<'a> Lexer<'a> {
             'N' => TokenKind::ATAN2, 'W' => TokenKind::RAND, 'X' => TokenKind::EXIT,
             'Z' => TokenKind::TIME, '&' => TokenKind::ALEN, 'A' => TokenKind::ALOAD,
             'a' => TokenKind::ASTORE, '_' => TokenKind::AINIT, 'K' => TokenKind::AFREE,
-            'O' => TokenKind::FILE_OPEN, 'G' => TokenKind::FILE_READ,
-            'H' => TokenKind::FILE_WRITE, 'Y' => TokenKind::FILE_CLOSE,
+            'O' => TokenKind::FileOpen, 'G' => TokenKind::FileRead,
+            'H' => TokenKind::FileWrite, 'Y' => TokenKind::FileClose,
             'U' => TokenKind::USLEEP,
             _ => return Err(LexError::UnexpectedCharacter(ch, loc)),
         };
