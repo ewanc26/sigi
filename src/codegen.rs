@@ -1,3 +1,9 @@
+//! C code generator for the sigi compiler.
+//!
+//! Lowers the IR (`Program`) into a single C source file that uses a
+//! fixed stack array and runtime prelude.  The generated code is
+//! portable C99 and links against libm.
+
 use crate::ast::{Op, Program, Function, TargetName, VarName};
 use std::collections::HashSet;
 
@@ -12,30 +18,36 @@ impl Codegen {
 
     pub fn generate(&self) -> String {
         let mut lines = Vec::new();
-        
-        // Runtime
+
+        // ─── Runtime Prelude ─────────────────────────────────────
+        // The prelude contains the stack implementation, array helpers,
+        // and math includes — everything needed to make the generated
+        // C self-contained.
         lines.push(include_str!("../runtime/prelude.c").to_string());
-        
+
+        // ─── Named Variable Declarations ─────────────────────────
         let mut named_vars = HashSet::new();
         self.collect_vars(&self.program.main_code, &mut named_vars);
         for fn_ in &self.program.functions {
             self.collect_vars(&fn_.body, &mut named_vars);
         }
-        
+
         let mut sorted_vars: Vec<_> = named_vars.into_iter().collect();
         sorted_vars.sort();
-        
+
         for name in sorted_vars {
             lines.push(format!("static double var_{} = 0;", self.c_ident(&TargetName::Named(name))));
         }
 
-        // Forward declare functions
+        // ─── Forward Declarations ────────────────────────────────
+        // C requires declarations before use; we emit forward decls for
+        // all functions so they can mutually call each other.
         for fn_ in &self.program.functions {
             lines.push(format!("static void func_{}(void);", self.c_ident(&fn_.name)));
         }
         lines.push("".to_string());
 
-        // Function definitions
+        // ─── Function Definitions ────────────────────────────────
         for fn_ in &self.program.functions {
             lines.push(format!("static void func_{}(void) {{", self.c_ident(&fn_.name)));
             for op in &fn_.body {
@@ -45,7 +57,7 @@ impl Codegen {
             lines.push("".to_string());
         }
 
-        // Main function
+        // ─── Main ────────────────────────────────────────────────
         lines.push("int main(void) {".to_string());
         lines.push("    srand((unsigned)time(NULL));".to_string());
         for op in &self.program.main_code {
@@ -56,7 +68,9 @@ impl Codegen {
 
         lines.join("\n")
     }
-    
+
+    /// Collect all named variables used in a block of ops.
+    /// Used to emit static declarations before any code.
     fn collect_vars(&self, ops: &[Op], named_vars: &mut HashSet<String>) {
         for op in ops {
             match op {
@@ -72,7 +86,8 @@ impl Codegen {
             }
         }
     }
-    
+
+    /// Convert a TargetName into a valid C identifier string.
     fn c_ident(&self, name: &TargetName) -> String {
         match name {
             TargetName::Index(i) => i.to_string(),
@@ -80,6 +95,7 @@ impl Codegen {
         }
     }
 
+    /// Emit the C statements for a single IR op at the given indent level.
     fn codegen_op(&self, op: &Op, indent: usize) -> Vec<String> {
         let prefix = "    ".repeat(indent);
         let mut lines = Vec::new();
@@ -106,6 +122,7 @@ impl Codegen {
                 lines.push(format!("{}func_{}();", prefix, self.c_ident(target)));
             },
             Op::While(body) => {
+                // sigi's while is a stack-top check: pop is not consumed.
                 lines.push(format!("{}while (1) {{", prefix));
                 lines.push(format!("{}    if (sp <= 0) break;", prefix));
                 lines.push(format!("{}    double _cond = stack[sp - 1];", prefix));
@@ -130,28 +147,33 @@ impl Codegen {
             },
             Op::Simple(kind) => {
                 match kind.as_str() {
+                    // ─── Arithmetic ──────────────────────────────
                     "ADD" | "SUB" | "MUL" | "DIV" => {
                         let op = match kind.as_str() { "ADD" => "+", "SUB" => "-", "MUL" => "*", _ => "/" };
                         lines.push(format!("{}{{ double b = pop(); double a = pop(); push(a {} b); }}", prefix, op));
                     },
                     "MOD" => lines.push(format!("{}{{ double b = pop(); double a = pop(); push(fmod(a, b)); }}", prefix)),
+                    // ─── Comparison ──────────────────────────────
                     "EQ" | "LT" | "GT" => {
                         let op = match kind.as_str() { "EQ" => "==", "LT" => "<", _ => ">" };
                         lines.push(format!("{}{{ double b = pop(); double a = pop(); push((a {} b) ? 1.0 : 0.0); }}", prefix, op));
                     },
                     "NOT" => lines.push(format!("{}push((pop() == 0.0) ? 1.0 : 0.0);", prefix)),
+                    // ─── Stack Operations ────────────────────────
                     "DUP" => lines.push(format!("{}{{ double x = stack[sp - 1]; push(x); }}", prefix)),
                     "SWAP" => lines.push(format!("{}{{ double t = stack[sp - 1]; stack[sp - 1] = stack[sp - 2]; stack[sp - 2] = t; }}", prefix)),
                     "DROP" => lines.push(format!("{}(void)pop();", prefix)),
+                    // ─── Math Functions ──────────────────────────
                     "SIN" | "COS" | "TAN" | "SQRT" | "FLOOR" | "LOG" | "EXP" | "ABS" => {
-                        let f = match kind.as_str() { 
+                        let f = match kind.as_str() {
                             "SIN" => "sin", "COS" => "cos", "TAN" => "tan", "SQRT" => "sqrt",
-                            "FLOOR" => "floor", "LOG" => "log", "EXP" => "exp", _ => "fabs" 
+                            "FLOOR" => "floor", "LOG" => "log", "EXP" => "exp", _ => "fabs"
                         };
                         lines.push(format!("{}push({}(pop()));", prefix, f));
                     },
                     "POW" => lines.push(format!("{}{{ double e = pop(); double b = pop(); push(pow(b, e)); }}", prefix)),
                     "ATAN2" => lines.push(format!("{}{{ double y = pop(); double x = pop(); push(atan2(y, x)); }}", prefix)),
+                    // ─── System / I/O ────────────────────────────
                     "RAND" => lines.push(format!("{}push((double)rand() / RAND_MAX);", prefix)),
                     "EXIT" => lines.push(format!("{}exit((int)pop());", prefix)),
                     "TIME" => lines.push(format!("{}push((double)time(NULL));", prefix)),

@@ -1,6 +1,14 @@
+//! Recursive-descent parser for the sigi stack language.
+//!
+//! Peekable lexer drives an LL(1) grammar: compound forms (blocks,
+//! loops, if-else, functions) are delimited by matching symbol pairs.
+//! Everything else is a single-token primitive.
+
 use crate::ast::{Program, Function, Op, TargetName, VarName, SourceLocation};
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
 use thiserror::Error;
+
+// ─── Parse Errors ────────────────────────────────────────────────
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -12,6 +20,13 @@ pub enum ParseError {
     InvalidFunctionNumber(SourceLocation),
 }
 
+// ─── Parser ──────────────────────────────────────────────────────
+
+/// Turns a token stream into a `Program` AST.
+///
+/// The parser distinguishes function definitions from anonymous blocks
+/// by peeking ahead: `{N ...}` or `{.name ...}` is a function, `{...}`
+/// alone is a block or if-else.
 pub struct Parser<'a> {
     lexer: std::iter::Peekable<Lexer<'a>>,
 }
@@ -24,7 +39,8 @@ impl<'a> Parser<'a> {
     fn peek(&mut self) -> Result<&Token, ParseError> {
         match self.lexer.peek() {
             Some(Ok(t)) => Ok(t),
-            Some(Err(_)) => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })), // Should handle err better
+            // Future: propagate the actual lex error instead of masking it
+            Some(Err(_)) => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })),
             None => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })),
         }
     }
@@ -45,6 +61,8 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // ─── Program ────────────────────────────────────────────────
+
     pub fn parse_program(&mut self) -> Result<Program, ParseError> {
         let mut functions = Vec::new();
         let mut main_code = Vec::new();
@@ -52,6 +70,8 @@ impl<'a> Parser<'a> {
         while self.lexer.peek().is_some() {
             let tok = self.peek()?;
             if tok.kind == TokenKind::BLOCK {
+                // Peek at the second token — if it's a var or ident this
+                // is a function definition, otherwise an anonymous block.
                 let next = self.lexer.clone().nth(1);
                 if let Some(Ok(n)) = next {
                     if n.kind == TokenKind::VAR || n.kind == TokenKind::IDENT {
@@ -65,10 +85,12 @@ impl<'a> Parser<'a> {
         Ok(Program { functions, main_code })
     }
 
+    // ─── Functions ──────────────────────────────────────────────
+
     fn parse_function(&mut self) -> Result<Function, ParseError> {
         let tok = self.advance()?;
         let num_tok = self.advance()?;
-        
+
         let name = match num_tok.value {
             Some(TokenValue::Var(n)) => {
                 if n > 99 { return Err(ParseError::InvalidFunctionNumber(num_tok.loc)); }
@@ -80,13 +102,16 @@ impl<'a> Parser<'a> {
 
         let body = self.parse_ops()?;
         self.consume(TokenKind::ENDB)?;
-        
+
+        // Skip optional else branch (used when function doubles as if-else body).
         if self.peek().map(|t| t.kind == TokenKind::ELSE).unwrap_or(false) {
             self.advance()?;
         }
-        
+
         Ok(Function { name, body, loc: tok.loc })
     }
+
+    // ─── Op Sequences ───────────────────────────────────────────
 
     fn parse_ops(&mut self) -> Result<Vec<Op>, ParseError> {
         let mut ops = Vec::new();
@@ -98,6 +123,8 @@ impl<'a> Parser<'a> {
         }
         Ok(ops)
     }
+
+    // ─── Single Op ──────────────────────────────────────────────
 
     fn parse_op(&mut self) -> Result<Op, ParseError> {
         let tok = self.advance()?;
@@ -125,6 +152,7 @@ impl<'a> Parser<'a> {
             TokenKind::BLOCK => {
                 let then_body = self.parse_ops()?;
                 if self.peek().map(|t| t.kind == TokenKind::ELSE).unwrap_or(false) {
+                    // Block followed by `;` is an if-else.
                     self.advance()?;
                     let else_body = self.parse_ops()?;
                     self.consume(TokenKind::ENDB)?;
@@ -134,6 +162,7 @@ impl<'a> Parser<'a> {
                     Ok(Op::Block(then_body))
                 }
             },
+            // Everything else is a primitive op named by its debug repr.
             _ => Ok(Op::Simple(format!("{:?}", tok.kind))),
         }
     }

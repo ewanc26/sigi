@@ -1,7 +1,15 @@
+//! Lexer for the sigi symbolic stack language.
+//!
+//! Every valid token is a single punctuation character — no alphanumeric
+//! keywords.  Identifiers and store-targets use `.` and `:.` prefixes.
+//! The lexer also strips C-style block comments and line comments (`\`).
+
 use std::iter::Peekable;
 use std::str::Chars;
 use thiserror::Error;
 use crate::ast::SourceLocation;
+
+// ─── Lex Errors ─────────────────────────────────────────────────
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum LexError {
@@ -23,6 +31,12 @@ pub enum LexError {
     UnexpectedCharacter(char, SourceLocation),
 }
 
+// ─── Token Types ─────────────────────────────────────────────────
+
+/// Kinds of tokens the sigi language recognises.
+///
+/// The naming follows the symbolic character, not the semantic operation,
+/// so mapping stays one-to-one with the language spec.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum TokenKind {
     NUM, VAR, IDENT, StoreIdent, CHAR, STRING,
@@ -38,6 +52,7 @@ pub enum TokenKind {
     EOF,
 }
 
+/// A single token with its kind, optional payload, and source location.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -45,6 +60,7 @@ pub struct Token {
     pub loc: SourceLocation,
 }
 
+/// The typed payload carried by some tokens (numbers, vars, names, chars, strings).
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenValue {
     Num(f64),
@@ -54,6 +70,13 @@ pub enum TokenValue {
     String(String),
 }
 
+// ─── Lexer ───────────────────────────────────────────────────────
+
+/// Character-level tokeniser for sigi source.
+///
+/// Advances through the source char-by-char, tracking line/col for
+/// error reporting.  Whitespace, commas, and comments are skipped
+/// silently between tokens.
 #[derive(Clone)]
 pub struct Lexer<'a> {
     chars: Peekable<Chars<'a>>,
@@ -92,14 +115,18 @@ impl<'a> Lexer<'a> {
     fn skip_whitespace_and_comments(&mut self) -> Result<(), LexError> {
         while let Some(ch) = self.peek() {
             if ch.is_whitespace() || ch == ',' {
+                // Commas are treated as whitespace — they exist solely to
+                // improve readability in dense symbolic code.
                 self.advance();
             } else if ch == '\\' {
+                // Line comment: skip to end of line.
                 self.advance();
                 while let Some(c) = self.peek() {
                     if c == '\n' { break; }
                     self.advance();
                 }
             } else if ch == '/' && self.peek_nth(1) == Some('*') {
+                // Block comment: C-style /* ... */.
                 let loc = self.current_loc();
                 self.advance(); self.advance();
                 while let Some(c) = self.peek() {
@@ -134,21 +161,24 @@ impl<'a> Lexer<'a> {
         match ch {
             '"' => self.read_string(loc),
             '\'' => self.read_char(loc),
-            '!' => self.read_number(loc),
-            '.' => self.read_identifier(loc),
+            '!' => self.read_number(loc),       // !prefix for numeric literals
+            '.' => self.read_identifier(loc),    // .name for named vars/functions
             ':' => {
-                if self.peek() == Some('.') {
+                if self.peek() == Some('.') {    // :.name for store-to-named
                     self.advance();
                     self.read_store_ident(loc)
                 } else {
                     Ok(Token { kind: TokenKind::STORE, value: None, loc })
                 }
             },
-            c if c.is_ascii_digit() => self.read_var(c, loc),
+            c if c.is_ascii_digit() => self.read_var(c, loc),  // bare digits → variable ref
             _ => self.read_symbol(ch, loc),
         }
     }
 
+    // ─── Token Readers ───────────────────────────────────────────
+
+    /// Read a double-quoted string, processing escape sequences.
     fn read_string(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut chars = String::new();
         while let Some(ch) = self.advance() {
@@ -168,6 +198,7 @@ impl<'a> Lexer<'a> {
         Err(LexError::UnterminatedString(loc))
     }
 
+    /// Read a single-quoted character literal.
     fn read_char(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let ch = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
         let value = if ch == '\\' {
@@ -182,6 +213,8 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind: TokenKind::CHAR, value: Some(TokenValue::Char(value)), loc })
     }
 
+    /// Read a numeric literal after the `!` prefix (e.g. `!3.14`).
+    /// Negative literals use `!-n` syntax.
     fn read_number(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let first = self.peek().ok_or(LexError::ExpectedNumber(loc))?;
         if !first.is_ascii_digit() && first != '-' && first != '.' {
@@ -205,6 +238,7 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind: TokenKind::NUM, value: Some(TokenValue::Num(val)), loc })
     }
 
+    /// Read a named identifier after `.` prefix.
     fn read_identifier(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut name = String::new();
         while let Some(c) = self.peek() {
@@ -216,6 +250,7 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind: TokenKind::IDENT, value: Some(TokenValue::Ident(name)), loc })
     }
 
+    /// Read a store-target name after `:.` prefix.
     fn read_store_ident(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let mut name = String::new();
         while let Some(c) = self.peek() {
@@ -227,6 +262,8 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind: TokenKind::StoreIdent, value: Some(TokenValue::Ident(name)), loc })
     }
 
+    /// Read a variable reference (bare digits 0--99).  Larger numbers
+    /// are returned as NUM to allow non-var constant push.
     fn read_var(&mut self, first: char, loc: SourceLocation) -> Result<Token, LexError> {
         let mut num_str = first.to_string();
         while let Some(c) = self.peek() {
@@ -237,6 +274,8 @@ impl<'a> Lexer<'a> {
         Ok(Token { kind: if val <= 99 { TokenKind::VAR } else { TokenKind::NUM }, value: Some(TokenValue::Var(val)), loc })
     }
 
+    /// Map a single punctuation character to its `TokenKind`.
+    /// This is the core symbol table of the sigi language.
     fn read_symbol(&mut self, ch: char, loc: SourceLocation) -> Result<Token, LexError> {
         let kind = match ch {
             '@' => TokenKind::DUP, '#' => TokenKind::SWAP, '$' => TokenKind::DROP,
@@ -262,6 +301,9 @@ impl<'a> Lexer<'a> {
     }
 }
 
+// ─── Iterator Adapter ────────────────────────────────────────────
+
+/// Wrap `next_token` as a standard iterator, suppressing the EOF sentinel.
 impl<'a> Iterator for Lexer<'a> {
     type Item = Result<Token, LexError>;
 
@@ -279,6 +321,7 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
+// ─── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {

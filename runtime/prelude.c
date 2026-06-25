@@ -1,3 +1,13 @@
+/* ── sigi C Runtime Prelude ───────────────────────────────────────
+ *
+ * Stack-based runtime for compiled sigi programs.  Included verbatim
+ * at the top of every generated C file.
+ *
+ * Stack: fixed-size array with overflow/underflow guards.
+ * Arrays: dynamically allocated, tracked by ID.
+ * Variables: 100 indexed slots for numbered vars.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -13,6 +23,8 @@ static double vars[100];
 static double *arrays[MAX_ARRAYS];
 static int array_sizes[MAX_ARRAYS];
 
+/* ── Array Helpers ─────────────────────────────────────────────── */
+
 static void arr_init(int id, int size) {
     if (id < 0 || id >= MAX_ARRAYS) { fprintf(stderr, "Array ID out of range\n"); exit(1); }
     arrays[id] = (double *)calloc(size, sizeof(double));
@@ -23,6 +35,8 @@ static void arr_free(int id) {
     if (id < 0 || id >= MAX_ARRAYS) { fprintf(stderr, "Array ID out of range\n"); exit(1); }
     if (arrays[id]) { free(arrays[id]); arrays[id] = NULL; array_sizes[id] = 0; }
 }
+
+/* ── Stack Operations ──────────────────────────────────────────── */
 
 static void push(double x) {
     if (sp >= STACK_SIZE) { fprintf(stderr, "Stack overflow\n"); exit(1); }

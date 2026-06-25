@@ -3,6 +3,8 @@ name = "sigi"
 version = "1.0.0"
 edition = "2021"
 
+# clap for CLI arg parsing (derive macros), thiserror for structured
+# error types in the lexer and parser, tempfile for --run tempdirs.
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 thiserror = "2.0"

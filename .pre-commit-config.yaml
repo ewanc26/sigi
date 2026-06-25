@@ -1,3 +1,5 @@
+# Pre-commit hooks for the Python reference implementation.
+# Runs black and isort on any Python source before committing.
 repos:
   - repo: https://github.com/psf/black
     rev: 24.3.0
