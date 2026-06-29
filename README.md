@@ -1,16 +1,14 @@
 # Sigi
 
-A pure symbolic stack language that compiles to C or can be interpreted.
+A pure symbolic stack language that compiles to C or runs in an interpreter.
 
-**Character set**: `!@#$%^&*()-+=[]{}|;:'",.<>/?\~` plus digits `0-9`
+**Character set:** `!@#$%^&*()-+=[]{}|;:'",.<>/?\~` plus digits `0-9`
 
 All syntax is symbolic. No alphanumeric keywords. User-defined names are prefixed with `.`.
 
-> 🧶 Also available on [Tangled](https://tangled.org/ewancroft.uk/sigi)
+> Also available on [Tangled](https://tangled.org/ewancroft.uk/sigi)
 
----
-
-## Installation
+## Install
 
 ```sh
 pip install -e .
@@ -18,29 +16,25 @@ pip install -e .
 
 This installs the `sigic` compiler.
 
----
-
 ## Usage
 
 ```sh
-# Start interactive REPL
+# Interactive REPL
 sigic
 
 # Compile to C
 sigic hello.si -o hello.c
 
-# Compile and run immediately
+# Compile and run
 sigic hello.si --run
 
-# Run using the reference interpreter (faster startup)
+# Reference interpreter (faster startup)
 sigic hello.si --interpret
 
-# Debug: show tokens or AST
+# Debug — show tokens or AST
 sigic hello.si --emit-tokens
 sigic hello.si --emit-ast
 ```
-
----
 
 ## Symbol reference
 
@@ -59,19 +53,19 @@ sigic hello.si --emit-ast
 | `<` | LT | Pop b, pop a → push 1 if a < b |
 | `>` | GT | Pop b, pop a → push 1 if a > b |
 | `~` | NOT | Pop a → push 1 if zero, else 0 |
-| `|` | PRINT | Pop and print as number |
+| `\|` | PRINT | Pop and print as number |
 | `^` | PRINTC | Pop and print as character |
 | `?` | INPUT | Read number from stdin |
 | `:` | STORE | Pop address, pop value → store to var |
-| `:.name`| STOREN | Pop value → store to named variable |
+| `:.name` | STOREN | Pop value → store to named variable |
 | `.name` | LOADN | Push value of named variable or call function |
 | `<n>` | LOAD | Push value of variable n (digits 0-99) |
-| `[ body ]` | WHILE | Loop while stack top is nonzero |
+| `[ body ]` | WHILE | Loop while stack top nonzero |
 | `{ then ; else }` | IF-ELSE | Pop condition, execute then or else |
 | `{N body }` | FUNC | Define function N (0-99) |
-| `{.name body }`| FUNCN | Define named function |
+| `{.name body }` | FUNCN | Define named function |
 | `(N)` | CALL | Call function N |
-| `(.name)`| CALLN | Call named function |
+| `(.name)` | CALLN | Call named function |
 | `"text"` | STRING | Print characters |
 | `'x` | CHAR | Push character code |
 | `\\` | COMMENT | Line comment |
@@ -99,23 +93,15 @@ sigic hello.si --emit-ast
 | `a` | ASTORE | Pop idx, pop id, pop val → array[idx] = val |
 | `U` | USLEEP | Pop microseconds → sleep |
 
----
+## Error handling
 
-## Robustness Features
-
-Sigi includes several features for reliable development:
-
-- **Static Analysis**: The compiler checks for undefined function calls and redefinitions before starting compilation or interpretation.
-- **Detailed Error Reporting**: All errors (Lex, Parse, Semantic, Runtime) include line and column information, along with a source snippet and pointer.
-- **Reference Interpreter**: Provides a second implementation to verify compiler behavior and enables a fast interactive workflow.
-- **Automated Test Suite**: A comprehensive set of tests ensures that all features and examples remain functional.
-- **System-Level Operations**: Supports explicit memory management for arrays and basic file I/O operations for real-world tasks.
-
----
+- Checks for undefined function calls and redefinitions before compiling
+- All errors (Lex, Parse, Semantic, Runtime) include line, column, source snippet, and pointer
+- Reference interpreter provides a second implementation for verification
 
 ## Examples
 
-### Named Identifiers
+### Named identifiers
 
 ```
 {.greet "Hello!\n"}
@@ -133,12 +119,8 @@ Sigi includes several features for reliable development:
 .my_fd Y
 ```
 
----
-
 ## Design
 
-Sigi is deliberately minimal. Every operation is a single character. There are no reserved words—only punctuation.
-
-The language is stack-based with postfix notation, making parsing trivial.
+Every operation is a single character. No reserved words — only punctuation. Stack-based with postfix notation, making parsing trivial.
 
 Inspired by Forth, Joy, and other concatenative languages.
