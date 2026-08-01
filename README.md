@@ -124,3 +124,10 @@ sigic hello.si --emit-ast
 Every operation is a single character. No reserved words — only punctuation. Stack-based with postfix notation, making parsing trivial.
 
 Inspired by Forth, Joy, and other concatenative languages.
+
+## Support
+
+If you find this project useful, consider supporting its development:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ewancroft)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-30363D?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sponsors/ewanc26)
