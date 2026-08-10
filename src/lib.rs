@@ -4,6 +4,6 @@
 //! Every token is a single punctuation character — no alphanumeric keywords.
 
 pub mod ast;
+pub mod codegen;
 pub mod lexer;
 pub mod parser;
-pub mod codegen;

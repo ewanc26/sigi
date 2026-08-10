@@ -4,10 +4,10 @@
 //! keywords.  Identifiers and store-targets use `.` and `:.` prefixes.
 //! The lexer also strips C-style block comments and line comments (`\`).
 
+use crate::ast::SourceLocation;
 use std::iter::Peekable;
 use std::str::Chars;
 use thiserror::Error;
-use crate::ast::SourceLocation;
 
 // ─── Lex Errors ─────────────────────────────────────────────────
 
@@ -39,15 +39,57 @@ pub enum LexError {
 /// so mapping stays one-to-one with the language spec.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum TokenKind {
-    NUM, VAR, IDENT, StoreIdent, CHAR, STRING,
-    BLOCK, ENDB, ELSE, WHILE, WEND, CALL, ENDCALL,
-    DUP, SWAP, DROP, ADD, SUB, MUL, DIV, MOD,
-    EQ, LT, GT, NOT,
-    PRINT, PRINTC, INPUT, STORE,
-    SIN, COS, TAN, SQRT, POW, FLOOR, LOG, EXP, ABS, ATAN2,
-    RAND, EXIT, TIME,
-    ALEN, ALOAD, ASTORE, AINIT, AFREE,
-    FileOpen, FileRead, FileWrite, FileClose,
+    NUM,
+    VAR,
+    IDENT,
+    StoreIdent,
+    CHAR,
+    STRING,
+    BLOCK,
+    ENDB,
+    ELSE,
+    WHILE,
+    WEND,
+    CALL,
+    ENDCALL,
+    DUP,
+    SWAP,
+    DROP,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    MOD,
+    EQ,
+    LT,
+    GT,
+    NOT,
+    PRINT,
+    PRINTC,
+    INPUT,
+    STORE,
+    SIN,
+    COS,
+    TAN,
+    SQRT,
+    POW,
+    FLOOR,
+    LOG,
+    EXP,
+    ABS,
+    ATAN2,
+    RAND,
+    EXIT,
+    TIME,
+    ALEN,
+    ALOAD,
+    ASTORE,
+    AINIT,
+    AFREE,
+    FileOpen,
+    FileRead,
+    FileWrite,
+    FileClose,
     USLEEP,
     EOF,
 }
@@ -109,7 +151,10 @@ impl<'a> Lexer<'a> {
     }
 
     fn current_loc(&self) -> SourceLocation {
-        SourceLocation { line: self.line, col: self.col }
+        SourceLocation {
+            line: self.line,
+            col: self.col,
+        }
     }
 
     fn skip_whitespace_and_comments(&mut self) -> Result<(), LexError> {
@@ -122,16 +167,20 @@ impl<'a> Lexer<'a> {
                 // Line comment: skip to end of line.
                 self.advance();
                 while let Some(c) = self.peek() {
-                    if c == '\n' { break; }
+                    if c == '\n' {
+                        break;
+                    }
                     self.advance();
                 }
             } else if ch == '/' && self.peek_nth(1) == Some('*') {
                 // Block comment: C-style /* ... */.
                 let loc = self.current_loc();
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 while let Some(c) = self.peek() {
                     if c == '*' && self.peek_nth(1) == Some('/') {
-                        self.advance(); self.advance();
+                        self.advance();
+                        self.advance();
                         break;
                     }
                     if self.advance().is_none() {
@@ -155,23 +204,34 @@ impl<'a> Lexer<'a> {
         let loc = self.current_loc();
         let ch = match self.advance() {
             Some(c) => c,
-            None => return Ok(Token { kind: TokenKind::EOF, value: None, loc }),
+            None => {
+                return Ok(Token {
+                    kind: TokenKind::EOF,
+                    value: None,
+                    loc,
+                })
+            }
         };
 
         match ch {
             '"' => self.read_string(loc),
             '\'' => self.read_char(loc),
-            '!' => self.read_number(loc),       // !prefix for numeric literals
-            '.' => self.read_identifier(loc),    // .name for named vars/functions
+            '!' => self.read_number(loc), // !prefix for numeric literals
+            '.' => self.read_identifier(loc), // .name for named vars/functions
             ':' => {
-                if self.peek() == Some('.') {    // :.name for store-to-named
+                if self.peek() == Some('.') {
+                    // :.name for store-to-named
                     self.advance();
                     self.read_store_ident(loc)
                 } else {
-                    Ok(Token { kind: TokenKind::STORE, value: None, loc })
+                    Ok(Token {
+                        kind: TokenKind::STORE,
+                        value: None,
+                        loc,
+                    })
                 }
-            },
-            c if c.is_ascii_digit() => self.read_var(c, loc),  // bare digits → variable ref
+            }
+            c if c.is_ascii_digit() => self.read_var(c, loc), // bare digits → variable ref
             _ => self.read_symbol(ch, loc),
         }
     }
@@ -183,12 +243,20 @@ impl<'a> Lexer<'a> {
         let mut chars = String::new();
         while let Some(ch) = self.advance() {
             if ch == '"' {
-                return Ok(Token { kind: TokenKind::STRING, value: Some(TokenValue::String(chars)), loc });
+                return Ok(Token {
+                    kind: TokenKind::STRING,
+                    value: Some(TokenValue::String(chars)),
+                    loc,
+                });
             }
             if ch == '\\' {
                 let esc = self.advance().ok_or(LexError::UnterminatedString(loc))?;
                 chars.push(match esc {
-                    'n' => '\n', 't' => '\t', 'r' => '\r', '\\' => '\\', '"' => '"',
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    '\\' => '\\',
+                    '"' => '"',
                     _ => esc,
                 });
             } else {
@@ -204,13 +272,21 @@ impl<'a> Lexer<'a> {
         let value = if ch == '\\' {
             let esc = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
             match esc {
-                'n' => b'\n', 't' => b'\t', 'r' => b'\r', '\'' => b'\'', '\\' => b'\\',
+                'n' => b'\n',
+                't' => b'\t',
+                'r' => b'\r',
+                '\'' => b'\'',
+                '\\' => b'\\',
                 _ => esc as u8,
             }
         } else {
             ch as u8
         };
-        Ok(Token { kind: TokenKind::CHAR, value: Some(TokenValue::Char(value)), loc })
+        Ok(Token {
+            kind: TokenKind::CHAR,
+            value: Some(TokenValue::Char(value)),
+            loc,
+        })
     }
 
     /// Read a numeric literal after the `!` prefix (e.g. `!3.14`).
@@ -218,24 +294,32 @@ impl<'a> Lexer<'a> {
     fn read_number(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let first = self.peek().ok_or(LexError::ExpectedNumber(loc))?;
         if !first.is_ascii_digit() && first != '-' && first != '.' {
-             return Err(LexError::ExpectedNumber(loc));
+            return Err(LexError::ExpectedNumber(loc));
         }
 
         let mut num_str = String::new();
         if first == '-' {
             num_str.push(self.advance().unwrap());
             let next = self.peek().ok_or(LexError::ExpectedDigit(loc))?;
-            if !next.is_ascii_digit() { return Err(LexError::ExpectedDigit(loc)); }
+            if !next.is_ascii_digit() {
+                return Err(LexError::ExpectedDigit(loc));
+            }
         }
 
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '.' {
                 num_str.push(self.advance().unwrap());
-            } else { break; }
+            } else {
+                break;
+            }
         }
 
         let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
-        Ok(Token { kind: TokenKind::NUM, value: Some(TokenValue::Num(val)), loc })
+        Ok(Token {
+            kind: TokenKind::NUM,
+            value: Some(TokenValue::Num(val)),
+            loc,
+        })
     }
 
     /// Read a named identifier after `.` prefix.
@@ -244,10 +328,18 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
                 name.push(self.advance().unwrap());
-            } else { break; }
+            } else {
+                break;
+            }
         }
-        if name.is_empty() { return Err(LexError::ExpectedName(".".to_string(), loc)); }
-        Ok(Token { kind: TokenKind::IDENT, value: Some(TokenValue::Ident(name)), loc })
+        if name.is_empty() {
+            return Err(LexError::ExpectedName(".".to_string(), loc));
+        }
+        Ok(Token {
+            kind: TokenKind::IDENT,
+            value: Some(TokenValue::Ident(name)),
+            loc,
+        })
     }
 
     /// Read a store-target name after `:.` prefix.
@@ -256,10 +348,18 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
                 name.push(self.advance().unwrap());
-            } else { break; }
+            } else {
+                break;
+            }
         }
-        if name.is_empty() { return Err(LexError::ExpectedName(":.".to_string(), loc)); }
-        Ok(Token { kind: TokenKind::StoreIdent, value: Some(TokenValue::Ident(name)), loc })
+        if name.is_empty() {
+            return Err(LexError::ExpectedName(":.".to_string(), loc));
+        }
+        Ok(Token {
+            kind: TokenKind::StoreIdent,
+            value: Some(TokenValue::Ident(name)),
+            loc,
+        })
     }
 
     /// Read a variable reference (bare digits 0--99).  Larger numbers
@@ -267,37 +367,80 @@ impl<'a> Lexer<'a> {
     fn read_var(&mut self, first: char, loc: SourceLocation) -> Result<Token, LexError> {
         let mut num_str = first.to_string();
         while let Some(c) = self.peek() {
-            if c.is_ascii_digit() { num_str.push(self.advance().unwrap()); }
-            else { break; }
+            if c.is_ascii_digit() {
+                num_str.push(self.advance().unwrap());
+            } else {
+                break;
+            }
         }
         let val: usize = num_str.parse().unwrap();
-        Ok(Token { kind: if val <= 99 { TokenKind::VAR } else { TokenKind::NUM }, value: Some(TokenValue::Var(val)), loc })
+        Ok(Token {
+            kind: if val <= 99 {
+                TokenKind::VAR
+            } else {
+                TokenKind::NUM
+            },
+            value: Some(TokenValue::Var(val)),
+            loc,
+        })
     }
 
     /// Map a single punctuation character to its `TokenKind`.
     /// This is the core symbol table of the sigi language.
     fn read_symbol(&mut self, ch: char, loc: SourceLocation) -> Result<Token, LexError> {
         let kind = match ch {
-            '@' => TokenKind::DUP, '#' => TokenKind::SWAP, '$' => TokenKind::DROP,
-            '+' => TokenKind::ADD, '-' => TokenKind::SUB, '*' => TokenKind::MUL,
-            '/' => TokenKind::DIV, '%' => TokenKind::MOD, '=' => TokenKind::EQ,
-            '<' => TokenKind::LT, '>' => TokenKind::GT, '~' => TokenKind::NOT,
-            '|' => TokenKind::PRINT, '^' => TokenKind::PRINTC, '?' => TokenKind::INPUT,
-            '[' => TokenKind::WHILE, ']' => TokenKind::WEND,
-            '(' => TokenKind::CALL, ')' => TokenKind::ENDCALL,
-            '{' => TokenKind::BLOCK, '}' => TokenKind::ENDB, ';' => TokenKind::ELSE,
-            'S' => TokenKind::SIN, 'C' => TokenKind::COS, 'T' => TokenKind::TAN,
-            'R' => TokenKind::SQRT, 'P' => TokenKind::POW, 'F' => TokenKind::FLOOR,
-            'L' => TokenKind::LOG, 'E' => TokenKind::EXP, 'M' => TokenKind::ABS,
-            'N' => TokenKind::ATAN2, 'W' => TokenKind::RAND, 'X' => TokenKind::EXIT,
-            'Z' => TokenKind::TIME, '&' => TokenKind::ALEN, 'A' => TokenKind::ALOAD,
-            'a' => TokenKind::ASTORE, '_' => TokenKind::AINIT, 'K' => TokenKind::AFREE,
-            'O' => TokenKind::FileOpen, 'G' => TokenKind::FileRead,
-            'H' => TokenKind::FileWrite, 'Y' => TokenKind::FileClose,
+            '@' => TokenKind::DUP,
+            '#' => TokenKind::SWAP,
+            '$' => TokenKind::DROP,
+            '+' => TokenKind::ADD,
+            '-' => TokenKind::SUB,
+            '*' => TokenKind::MUL,
+            '/' => TokenKind::DIV,
+            '%' => TokenKind::MOD,
+            '=' => TokenKind::EQ,
+            '<' => TokenKind::LT,
+            '>' => TokenKind::GT,
+            '~' => TokenKind::NOT,
+            '|' => TokenKind::PRINT,
+            '^' => TokenKind::PRINTC,
+            '?' => TokenKind::INPUT,
+            '[' => TokenKind::WHILE,
+            ']' => TokenKind::WEND,
+            '(' => TokenKind::CALL,
+            ')' => TokenKind::ENDCALL,
+            '{' => TokenKind::BLOCK,
+            '}' => TokenKind::ENDB,
+            ';' => TokenKind::ELSE,
+            'S' => TokenKind::SIN,
+            'C' => TokenKind::COS,
+            'T' => TokenKind::TAN,
+            'R' => TokenKind::SQRT,
+            'P' => TokenKind::POW,
+            'F' => TokenKind::FLOOR,
+            'L' => TokenKind::LOG,
+            'E' => TokenKind::EXP,
+            'M' => TokenKind::ABS,
+            'N' => TokenKind::ATAN2,
+            'W' => TokenKind::RAND,
+            'X' => TokenKind::EXIT,
+            'Z' => TokenKind::TIME,
+            '&' => TokenKind::ALEN,
+            'A' => TokenKind::ALOAD,
+            'a' => TokenKind::ASTORE,
+            '_' => TokenKind::AINIT,
+            'K' => TokenKind::AFREE,
+            'O' => TokenKind::FileOpen,
+            'G' => TokenKind::FileRead,
+            'H' => TokenKind::FileWrite,
+            'Y' => TokenKind::FileClose,
             'U' => TokenKind::USLEEP,
             _ => return Err(LexError::UnexpectedCharacter(ch, loc)),
         };
-        Ok(Token { kind, value: None, loc })
+        Ok(Token {
+            kind,
+            value: None,
+            loc,
+        })
     }
 }
 

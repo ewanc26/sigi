@@ -4,7 +4,7 @@
 //! loops, if-else, functions) are delimited by matching symbol pairs.
 //! Everything else is a single-token primitive.
 
-use crate::ast::{Program, Function, Op, TargetName, VarName, SourceLocation};
+use crate::ast::{Function, Op, Program, SourceLocation, TargetName, VarName};
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
 use thiserror::Error;
 
@@ -33,22 +33,33 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer: lexer.peekable() }
+        Self {
+            lexer: lexer.peekable(),
+        }
     }
 
     fn peek(&mut self) -> Result<&Token, ParseError> {
         match self.lexer.peek() {
             Some(Ok(t)) => Ok(t),
             // Future: propagate the actual lex error instead of masking it
-            Some(Err(_)) => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })),
-            None => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })),
+            Some(Err(_)) => Err(ParseError::UnexpectedToken(
+                TokenKind::EOF,
+                SourceLocation { line: 0, col: 0 },
+            )),
+            None => Err(ParseError::UnexpectedToken(
+                TokenKind::EOF,
+                SourceLocation { line: 0, col: 0 },
+            )),
         }
     }
 
     fn advance(&mut self) -> Result<Token, ParseError> {
         match self.lexer.next() {
             Some(Ok(t)) => Ok(t),
-            _ => Err(ParseError::UnexpectedToken(TokenKind::EOF, SourceLocation { line: 0, col: 0 })),
+            _ => Err(ParseError::UnexpectedToken(
+                TokenKind::EOF,
+                SourceLocation { line: 0, col: 0 },
+            )),
         }
     }
 
@@ -82,7 +93,10 @@ impl<'a> Parser<'a> {
             }
             main_code.push(self.parse_op()?);
         }
-        Ok(Program { functions, main_code })
+        Ok(Program {
+            functions,
+            main_code,
+        })
     }
 
     // ─── Functions ──────────────────────────────────────────────
@@ -93,9 +107,11 @@ impl<'a> Parser<'a> {
 
         let name = match num_tok.value {
             Some(TokenValue::Var(n)) => {
-                if n > 99 { return Err(ParseError::InvalidFunctionNumber(num_tok.loc)); }
+                if n > 99 {
+                    return Err(ParseError::InvalidFunctionNumber(num_tok.loc));
+                }
                 TargetName::Index(n)
-            },
+            }
             Some(TokenValue::Ident(s)) => TargetName::Named(s),
             _ => return Err(ParseError::ExpectedToken(TokenKind::IDENT, num_tok.loc)),
         };
@@ -104,11 +120,19 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::ENDB)?;
 
         // Skip optional else branch (used when function doubles as if-else body).
-        if self.peek().map(|t| t.kind == TokenKind::ELSE).unwrap_or(false) {
+        if self
+            .peek()
+            .map(|t| t.kind == TokenKind::ELSE)
+            .unwrap_or(false)
+        {
             self.advance()?;
         }
 
-        Ok(Function { name, body, loc: tok.loc })
+        Ok(Function {
+            name,
+            body,
+            loc: tok.loc,
+        })
     }
 
     // ─── Op Sequences ───────────────────────────────────────────
@@ -116,7 +140,10 @@ impl<'a> Parser<'a> {
     fn parse_ops(&mut self) -> Result<Vec<Op>, ParseError> {
         let mut ops = Vec::new();
         while let Ok(tok) = self.peek() {
-            if matches!(tok.kind, TokenKind::EOF | TokenKind::ENDB | TokenKind::WEND | TokenKind::ELSE) {
+            if matches!(
+                tok.kind,
+                TokenKind::EOF | TokenKind::ENDB | TokenKind::WEND | TokenKind::ELSE
+            ) {
                 break;
             }
             ops.push(self.parse_op()?);
@@ -129,10 +156,32 @@ impl<'a> Parser<'a> {
     fn parse_op(&mut self) -> Result<Op, ParseError> {
         let tok = self.advance()?;
         match tok.kind {
-            TokenKind::NUM => Ok(Op::Push(if let Some(TokenValue::Num(n)) = tok.value { n } else { 0.0 })),
-            TokenKind::VAR => Ok(Op::Var(VarName::Index(if let Some(TokenValue::Var(n)) = tok.value { n } else { 0 }))),
-            TokenKind::IDENT => Ok(Op::Var(VarName::Named(if let Some(TokenValue::Ident(s)) = tok.value { s } else { "".to_string() }))),
-            TokenKind::StoreIdent => Ok(Op::StoreNamed(if let Some(TokenValue::Ident(s)) = tok.value { s } else { "".to_string() })),
+            TokenKind::NUM => Ok(Op::Push(if let Some(TokenValue::Num(n)) = tok.value {
+                n
+            } else {
+                0.0
+            })),
+            TokenKind::VAR => Ok(Op::Var(VarName::Index(
+                if let Some(TokenValue::Var(n)) = tok.value {
+                    n
+                } else {
+                    0
+                },
+            ))),
+            TokenKind::IDENT => Ok(Op::Var(VarName::Named(
+                if let Some(TokenValue::Ident(s)) = tok.value {
+                    s
+                } else {
+                    "".to_string()
+                },
+            ))),
+            TokenKind::StoreIdent => Ok(Op::StoreNamed(
+                if let Some(TokenValue::Ident(s)) = tok.value {
+                    s
+                } else {
+                    "".to_string()
+                },
+            )),
             TokenKind::CALL => {
                 let target_tok = self.advance()?;
                 let target = match target_tok.value {
@@ -142,26 +191,37 @@ impl<'a> Parser<'a> {
                 };
                 self.consume(TokenKind::ENDCALL)?;
                 Ok(Op::Call(target))
-            },
-            TokenKind::STRING => Ok(Op::String(if let Some(TokenValue::String(s)) = tok.value { s } else { "".to_string() })),
+            }
+            TokenKind::STRING => Ok(Op::String(if let Some(TokenValue::String(s)) = tok.value {
+                s
+            } else {
+                "".to_string()
+            })),
             TokenKind::WHILE => {
                 let body = self.parse_ops()?;
                 self.consume(TokenKind::WEND)?;
                 Ok(Op::While(body))
-            },
+            }
             TokenKind::BLOCK => {
                 let then_body = self.parse_ops()?;
-                if self.peek().map(|t| t.kind == TokenKind::ELSE).unwrap_or(false) {
+                if self
+                    .peek()
+                    .map(|t| t.kind == TokenKind::ELSE)
+                    .unwrap_or(false)
+                {
                     // Block followed by `;` is an if-else.
                     self.advance()?;
                     let else_body = self.parse_ops()?;
                     self.consume(TokenKind::ENDB)?;
-                    Ok(Op::IfElse { then_body, else_body })
+                    Ok(Op::IfElse {
+                        then_body,
+                        else_body,
+                    })
                 } else {
                     self.consume(TokenKind::ENDB)?;
                     Ok(Op::Block(then_body))
                 }
-            },
+            }
             // Everything else is a primitive op named by its debug repr.
             _ => Ok(Op::Simple(format!("{:?}", tok.kind))),
         }

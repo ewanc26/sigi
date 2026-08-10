@@ -4,8 +4,6 @@
 //! Every symbol token maps to either a primitive operation (`Op::Simple`)
 //! or a compound form (Block, While, IfElse).
 
-use std::fmt;
-
 /// Source position used in error messages across all pipeline stages.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SourceLocation {

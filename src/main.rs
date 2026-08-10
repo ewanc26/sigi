@@ -1,9 +1,9 @@
-use clap::{Parser};
-use std::fs;
-use std::path::PathBuf;
+use clap::Parser;
+use sigi::codegen::Codegen;
 use sigi::lexer::Lexer;
 use sigi::parser::Parser as SigiParser;
-use sigi::codegen::Codegen;
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "sigic", about = "Sigi compiler - symbolic esoteric language")]
@@ -30,10 +30,23 @@ struct Cli {
     /// C compiler to use when --run is set.
     #[arg(long, default_value = "gcc")]
     cc: String,
+
+    /// Print sponsor links and exit.
+    #[arg(long)]
+    support: bool,
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    // ─── Support ──────────────────────────────────────────────────
+
+    if cli.support {
+        println!("Support Sigi development:");
+        println!("  Ko-fi: https://ko-fi.com/ewancroft");
+        println!("  GitHub Sponsors: https://github.com/sponsors/ewanc26");
+        return;
+    }
 
     // ─── REPL / Interpreter ───────────────────────────────────────
 

@@ -4,7 +4,7 @@
 //! fixed stack array and runtime prelude.  The generated code is
 //! portable C99 and links against libm.
 
-use crate::ast::{Op, Program, Function, TargetName, VarName};
+use crate::ast::{Op, Program, TargetName, VarName};
 use std::collections::HashSet;
 
 pub struct Codegen {
@@ -36,20 +36,29 @@ impl Codegen {
         sorted_vars.sort();
 
         for name in sorted_vars {
-            lines.push(format!("static double var_{} = 0;", self.c_ident(&TargetName::Named(name))));
+            lines.push(format!(
+                "static double var_{} = 0;",
+                self.c_ident(&TargetName::Named(name))
+            ));
         }
 
         // ─── Forward Declarations ────────────────────────────────
         // C requires declarations before use; we emit forward decls for
         // all functions so they can mutually call each other.
         for fn_ in &self.program.functions {
-            lines.push(format!("static void func_{}(void);", self.c_ident(&fn_.name)));
+            lines.push(format!(
+                "static void func_{}(void);",
+                self.c_ident(&fn_.name)
+            ));
         }
         lines.push("".to_string());
 
         // ─── Function Definitions ────────────────────────────────
         for fn_ in &self.program.functions {
-            lines.push(format!("static void func_{}(void) {{", self.c_ident(&fn_.name)));
+            lines.push(format!(
+                "static void func_{}(void) {{",
+                self.c_ident(&fn_.name)
+            ));
             for op in &fn_.body {
                 lines.extend(self.codegen_op(op, 1));
             }
@@ -76,13 +85,16 @@ impl Codegen {
             match op {
                 Op::Var(VarName::Named(name)) | Op::StoreNamed(name) => {
                     named_vars.insert(name.clone());
-                },
+                }
                 Op::While(body) | Op::Block(body) => self.collect_vars(body, named_vars),
-                Op::IfElse { then_body, else_body } => {
+                Op::IfElse {
+                    then_body,
+                    else_body,
+                } => {
                     self.collect_vars(then_body, named_vars);
                     self.collect_vars(else_body, named_vars);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
     }
@@ -103,48 +115,65 @@ impl Codegen {
         match op {
             Op::Push(val) => {
                 lines.push(format!("{}push({});", prefix, val));
-            },
-            Op::Var(name) => {
-                match name {
-                    VarName::Index(i) => lines.push(format!("{}push(vars[{}]);", prefix, i)),
-                    VarName::Named(n) => lines.push(format!("{}push(var_{});", prefix, self.c_ident(&TargetName::Named(n.clone())))),
-                }
+            }
+            Op::Var(name) => match name {
+                VarName::Index(i) => lines.push(format!("{}push(vars[{}]);", prefix, i)),
+                VarName::Named(n) => lines.push(format!(
+                    "{}push(var_{});",
+                    prefix,
+                    self.c_ident(&TargetName::Named(n.clone()))
+                )),
             },
             Op::StoreNamed(name) => {
-                lines.push(format!("{}var_{} = pop();", prefix, self.c_ident(&TargetName::Named(name.clone()))));
-            },
+                lines.push(format!(
+                    "{}var_{} = pop();",
+                    prefix,
+                    self.c_ident(&TargetName::Named(name.clone()))
+                ));
+            }
             Op::String(val) => {
                 for ch in val.chars() {
                     lines.push(format!("{}putchar({});", prefix, ch as u8));
                 }
-            },
+            }
             Op::Call(target) => {
                 lines.push(format!("{}func_{}();", prefix, self.c_ident(target)));
-            },
+            }
             Op::While(body) => {
                 // sigi's while is a stack-top check: pop is not consumed.
                 lines.push(format!("{}while (1) {{", prefix));
                 lines.push(format!("{}    if (sp <= 0) break;", prefix));
                 lines.push(format!("{}    double _cond = stack[sp - 1];", prefix));
                 lines.push(format!("{}    if (_cond == 0.0) break;", prefix));
-                for op in body { lines.extend(self.codegen_op(op, indent + 1)); }
+                for op in body {
+                    lines.extend(self.codegen_op(op, indent + 1));
+                }
                 lines.push(format!("{}}}", prefix));
-            },
+            }
             Op::Block(body) => {
                 lines.push(format!("{}{{", prefix));
-                for op in body { lines.extend(self.codegen_op(op, indent + 1)); }
+                for op in body {
+                    lines.extend(self.codegen_op(op, indent + 1));
+                }
                 lines.push(format!("{}}}", prefix));
-            },
-            Op::IfElse { then_body, else_body } => {
+            }
+            Op::IfElse {
+                then_body,
+                else_body,
+            } => {
                 lines.push(format!("{}{{", prefix));
                 lines.push(format!("{}    double _cond = pop();", prefix));
                 lines.push(format!("{}    if (_cond != 0.0) {{", prefix));
-                for op in then_body { lines.extend(self.codegen_op(op, indent + 2)); }
+                for op in then_body {
+                    lines.extend(self.codegen_op(op, indent + 2));
+                }
                 lines.push(format!("{}    }} else {{", prefix));
-                for op in else_body { lines.extend(self.codegen_op(op, indent + 2)); }
+                for op in else_body {
+                    lines.extend(self.codegen_op(op, indent + 2));
+                }
                 lines.push(format!("{}    }}", prefix));
                 lines.push(format!("{}}}", prefix));
-            },
+            }
             Op::Simple(kind) => {
                 match kind.as_str() {
                     // ─── Arithmetic ──────────────────────────────
