@@ -36,6 +36,19 @@ static void arr_free(int id) {
     if (arrays[id]) { free(arrays[id]); arrays[id] = NULL; array_sizes[id] = 0; }
 }
 
+static double *arr_slot(int id, int index) {
+    if (id < 0 || id >= MAX_ARRAYS || !arrays[id]) { fprintf(stderr, "Array not allocated\n"); exit(1); }
+    if (index < 0 || index >= array_sizes[id]) { fprintf(stderr, "Array index out of range\n"); exit(1); }
+    return &arrays[id][index];
+}
+
+/* ── Integer Helpers ───────────────────────────────────────────── */
+
+static int shift_count(double n) {
+    if (n < 0.0 || n > 63.0) { fprintf(stderr, "Shift count out of range\n"); exit(1); }
+    return (int)n;
+}
+
 /* ── Stack Operations ──────────────────────────────────────────── */
 
 static void push(double x) {

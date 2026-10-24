@@ -31,11 +31,15 @@ pub enum Op {
     Block(Vec<Op>),
     /// While loop: repeat body while stack top is nonzero.
     While(Vec<Op>),
+    /// Counted loop: pop count, run body that many times.
+    For(Vec<Op>),
     /// Conditional: pop condition, execute one of two bodies.
     IfElse {
         then_body: Vec<Op>,
         else_body: Vec<Op>,
     },
+    /// Call a declared C function, popping its arguments from the stack.
+    FfiCall(String),
     /// A primitive operation identified by its token name (ADD, DUP, etc.).
     Simple(String),
 }
@@ -66,9 +70,18 @@ pub struct Function {
     pub loc: SourceLocation,
 }
 
+/// A C function declared with `x "header" .name !arity`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForeignFn {
+    pub name: String,
+    pub header: String,
+    pub arity: usize,
+}
+
 /// A complete program: a set of function definitions and a main block.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub functions: Vec<Function>,
     pub main_code: Vec<Op>,
+    pub foreign: Vec<ForeignFn>,
 }
