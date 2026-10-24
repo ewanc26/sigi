@@ -58,7 +58,7 @@ fn main() {
     }
 
     let source_path = cli.source.expect("Source file required");
-    let source = fs::read_to_string(source_path).expect("Failed to read source file");
+    let source = fs::read_to_string(&source_path).expect("Failed to read source file");
 
     // ─── Compile Pipeline: Lex → Parse → Codegen ──────────────────
 
@@ -70,6 +70,14 @@ fn main() {
         println!("Interpreter not implemented in Rust yet. Using Python version...");
         return;
     }
+
+    let base_dir = source_path.parent().unwrap_or(std::path::Path::new("."));
+    let user_sources: Vec<PathBuf> = program
+        .foreign
+        .iter()
+        .filter(|f| f.is_user_source())
+        .map(|f| base_dir.join(&f.header))
+        .collect();
 
     let codegen = Codegen::new(program);
     let c_code = codegen.generate();
@@ -90,6 +98,7 @@ fn main() {
 
         let status = Command::new(&cli.cc)
             .arg(&c_file)
+            .args(&user_sources)
             .arg("-o")
             .arg(&exe_file)
             .arg("-lm")
