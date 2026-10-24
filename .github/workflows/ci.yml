@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Install with the documented command
+        run: cargo install --path . --locked --root "$RUNNER_TEMP/sigi"
+
+      - name: Compile and run an example
+        run: |
+          "$RUNNER_TEMP/sigi/bin/sigic" examples/hello_world.si --run
