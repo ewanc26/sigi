@@ -96,8 +96,18 @@ fn main() {
             .status()
             .expect("Failed to execute C compiler");
 
-        if status.success() {
-            Command::new(&exe_file).status().unwrap();
+        let code = if status.success() {
+            Command::new(&exe_file)
+                .status()
+                .expect("Failed to run program")
+                .code()
+                .unwrap_or(1)
+        } else {
+            status.code().unwrap_or(1)
+        };
+        drop(tmp);
+        if code != 0 {
+            std::process::exit(code);
         }
     } else {
         // Default: print the generated C to stdout so it can be piped.
