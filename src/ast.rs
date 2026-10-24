@@ -78,6 +78,12 @@ pub struct ForeignFn {
     pub arity: usize,
 }
 
+impl ForeignFn {
+    pub fn is_user_source(&self) -> bool {
+        self.header.ends_with(".c")
+    }
+}
+
 /// A complete program: a set of function definitions and a main block.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {

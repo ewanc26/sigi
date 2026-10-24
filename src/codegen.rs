@@ -30,10 +30,19 @@ impl Codegen {
             .program
             .foreign
             .iter()
+            .filter(|f| !f.is_user_source())
             .map(|f| f.header.as_str())
             .collect();
         for header in headers {
             lines.push(format!("#include <{header}>"));
+        }
+        for f in self.program.foreign.iter().filter(|f| f.is_user_source()) {
+            let params = if f.arity == 0 {
+                "void".to_string()
+            } else {
+                vec!["double"; f.arity].join(", ")
+            };
+            lines.push(format!("double {}({params});", f.name));
         }
 
         // ─── Named Variable Declarations ─────────────────────────

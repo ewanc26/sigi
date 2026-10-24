@@ -100,7 +100,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `v` | LOGOR | Pop b, pop a → push 1 if either nonzero, else 0 |
 | `l` | INTDIV | Pop b, pop a → push a / b with C integer division |
 | `f{ body }` | FOR | Pop count, run body that many times |
-| `x "header" .name !N` | FFI_DECL | Declare C function `name` with N arguments from `<header>` |
+| `x "header" .name !N` | FFI_DECL | Declare C function `name` with N double arguments from `<header>`; a `.c` path is compiled and linked from the source's directory |
 | `c .name` | FFI_CALL | Pop N arguments, call declared C function, push result |
 
 ## Error handling
