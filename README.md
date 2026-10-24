@@ -90,6 +90,18 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `A` | ALOAD | Pop idx, pop id → push array[idx] |
 | `a` | ASTORE | Pop idx, pop id, pop val → array[idx] = val |
 | `U` | USLEEP | Pop microseconds → sleep |
+| `B` | BITAND | Pop b, pop a → push a & b (integers) |
+| `V` | BITOR | Pop b, pop a → push a \| b (integers) |
+| `Q` | BITXOR | Pop b, pop a → push a ^ b (integers) |
+| `J` | BITNOT | Pop a → push ~a (integer) |
+| `D` | SHL | Pop b, pop a → push a << b (b in 0-63) |
+| `I` | SHR | Pop b, pop a → push a >> b (b in 0-63) |
+| `b` | LOGAND | Pop b, pop a → push 1 if both nonzero, else 0 |
+| `v` | LOGOR | Pop b, pop a → push 1 if either nonzero, else 0 |
+| `l` | INTDIV | Pop b, pop a → push a / b with C integer division |
+| `f{ body }` | FOR | Pop count, run body that many times |
+| `x "header" .name !N` | FFI_DECL | Declare C function `name` with N arguments from `<header>` |
+| `c .name` | FFI_CALL | Pop N arguments, call declared C function, push result |
 
 ## Error handling
 

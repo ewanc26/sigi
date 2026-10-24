@@ -1,0 +1,4 @@
+x "math.h" .hypot !2
+x "math.h" .cbrt !1
+!3 !4 c .hypot |
+!8 c .cbrt |

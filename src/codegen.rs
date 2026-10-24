@@ -5,7 +5,7 @@
 //! portable C99 and links against libm.
 
 use crate::ast::{Op, Program, TargetName, VarName};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 pub struct Codegen {
     program: Program,
@@ -24,6 +24,17 @@ impl Codegen {
         // and math includes — everything needed to make the generated
         // C self-contained.
         lines.push(include_str!("../runtime/prelude.c").to_string());
+
+        // ─── Foreign Headers ─────────────────────────────────────
+        let headers: BTreeSet<&str> = self
+            .program
+            .foreign
+            .iter()
+            .map(|f| f.header.as_str())
+            .collect();
+        for header in headers {
+            lines.push(format!("#include <{header}>"));
+        }
 
         // ─── Named Variable Declarations ─────────────────────────
         let mut named_vars = HashSet::new();
@@ -86,7 +97,9 @@ impl Codegen {
                 Op::Var(VarName::Named(name)) | Op::StoreNamed(name) => {
                     named_vars.insert(name.clone());
                 }
-                Op::While(body) | Op::Block(body) => self.collect_vars(body, named_vars),
+                Op::While(body) | Op::Block(body) | Op::For(body) => {
+                    self.collect_vars(body, named_vars)
+                }
                 Op::IfElse {
                     then_body,
                     else_body,
@@ -157,6 +170,32 @@ impl Codegen {
                 }
                 lines.push(format!("{}}}", prefix));
             }
+            Op::For(body) => {
+                lines.push(format!("{prefix}{{"));
+                lines.push(format!("{prefix}    long long _count = (long long)pop();"));
+                lines.push(format!("{prefix}    for (long long _i = 0; _i < _count; _i++) {{"));
+                for op in body {
+                    lines.extend(self.codegen_op(op, indent + 2));
+                }
+                lines.push(format!("{prefix}    }}"));
+                lines.push(format!("{prefix}}}"));
+            }
+            Op::FfiCall(name) => {
+                let arity = self
+                    .program
+                    .foreign
+                    .iter()
+                    .find(|f| &f.name == name)
+                    .map(|f| f.arity)
+                    .expect("parser rejects calls to undeclared foreign functions");
+                let args: Vec<String> = (0..arity).map(|i| format!("_f{i}")).collect();
+                lines.push(format!("{prefix}{{"));
+                for i in (0..arity).rev() {
+                    lines.push(format!("{prefix}    double _f{i} = pop();"));
+                }
+                lines.push(format!("{prefix}    push({name}({}));", args.join(", ")));
+                lines.push(format!("{prefix}}}"));
+            }
             Op::IfElse {
                 then_body,
                 else_body,
@@ -182,6 +221,18 @@ impl Codegen {
                         lines.push(format!("{}{{ double b = pop(); double a = pop(); push(a {} b); }}", prefix, op));
                     },
                     "MOD" => lines.push(format!("{}{{ double b = pop(); double a = pop(); push(fmod(a, b)); }}", prefix)),
+                    "INTDIV" => lines.push(format!("{prefix}{{ long long b = (long long)pop(); long long a = (long long)pop(); if (b == 0) {{ fprintf(stderr, \"Division by zero\\n\"); exit(1); }} push((double)(a / b)); }}")),
+                    // ─── Bitwise and Shift ───────────────────────
+                    "BITAND" | "BITOR" | "BITXOR" => {
+                        let op = match kind.as_str() { "BITAND" => "&", "BITOR" => "|", _ => "^" };
+                        lines.push(format!("{prefix}{{ long long b = (long long)pop(); long long a = (long long)pop(); push((double)(a {op} b)); }}"));
+                    },
+                    "BITNOT" => lines.push(format!("{prefix}push((double)~(long long)pop());")),
+                    "SHL" => lines.push(format!("{prefix}{{ int n = shift_count(pop()); long long a = (long long)pop(); push((double)(long long)((unsigned long long)a << n)); }}")),
+                    "SHR" => lines.push(format!("{prefix}{{ int n = shift_count(pop()); long long a = (long long)pop(); push((double)(a >> n)); }}")),
+                    // ─── Logical ─────────────────────────────────
+                    "LOGAND" => lines.push(format!("{prefix}{{ double b = pop(); double a = pop(); push((a != 0.0 && b != 0.0) ? 1.0 : 0.0); }}")),
+                    "LOGOR" => lines.push(format!("{prefix}{{ double b = pop(); double a = pop(); push((a != 0.0 || b != 0.0) ? 1.0 : 0.0); }}")),
                     // ─── Comparison ──────────────────────────────
                     "EQ" | "LT" | "GT" => {
                         let op = match kind.as_str() { "EQ" => "==", "LT" => "<", _ => ">" };
@@ -207,8 +258,8 @@ impl Codegen {
                     "EXIT" => lines.push(format!("{}exit((int)pop());", prefix)),
                     "TIME" => lines.push(format!("{}push((double)time(NULL));", prefix)),
                     "ALEN" => lines.push(format!("{}{{ int id = (int)pop(); push(array_sizes[id]); }}", prefix)),
-                    "ALOAD" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); push(arrays[id][idx]); }}", prefix)),
-                    "ASTORE" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); double val = pop(); arrays[id][idx] = val; }}", prefix)),
+                    "ALOAD" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); push(*arr_slot(id, idx)); }}", prefix)),
+                    "ASTORE" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); double val = pop(); *arr_slot(id, idx) = val; }}", prefix)),
                     "AINIT" => lines.push(format!("{}{{ int id = (int)pop(); int size = (int)pop(); arr_init(id, size); }}", prefix)),
                     "AFREE" => lines.push(format!("{}{{ int id = (int)pop(); arr_free(id); }}", prefix)),
                     "FILE_OPEN" => lines.push(format!("{}{{ int mode = (int)pop(); int len = (int)pop(); char *path = (char *)malloc(len + 1); for (int i = 0; i < len; i++) path[i] = (char)pop(); path[len] = '\\0'; FILE *f = fopen(path, mode == 0 ? \"r\" : \"w\"); free(path); push((double)fileno(f)); }}", prefix)),

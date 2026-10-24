@@ -4,9 +4,11 @@
 //! loops, if-else, functions) are delimited by matching symbol pairs.
 //! Everything else is a single-token primitive.
 
-use crate::ast::{Function, Op, Program, SourceLocation, TargetName, VarName};
+use crate::ast::{ForeignFn, Function, Op, Program, SourceLocation, TargetName, VarName};
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
 use thiserror::Error;
+
+const MAX_FOREIGN_ARITY: usize = 4;
 
 // ─── Parse Errors ────────────────────────────────────────────────
 
@@ -18,6 +20,12 @@ pub enum ParseError {
     UnexpectedToken(TokenKind, SourceLocation),
     #[error("Function number must be 0-99 at {0:?}")]
     InvalidFunctionNumber(SourceLocation),
+    #[error("Foreign arity must be 0-{MAX_FOREIGN_ARITY} at {0:?}")]
+    InvalidArity(SourceLocation),
+    #[error("Foreign function {0} is declared twice at {1:?}")]
+    DuplicateForeign(String, SourceLocation),
+    #[error("Foreign function {0} is not declared at {1:?}")]
+    UndeclaredForeign(String, SourceLocation),
 }
 
 // ─── Parser ──────────────────────────────────────────────────────
@@ -29,12 +37,14 @@ pub enum ParseError {
 /// alone is a block or if-else.
 pub struct Parser<'a> {
     lexer: std::iter::Peekable<Lexer<'a>>,
+    foreign: Vec<ForeignFn>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
         Self {
             lexer: lexer.peekable(),
+            foreign: Vec::new(),
         }
     }
 
@@ -79,6 +89,10 @@ impl<'a> Parser<'a> {
         let mut main_code = Vec::new();
 
         while self.lexer.peek().is_some() {
+            if self.peek()?.kind == TokenKind::FfiDecl {
+                self.parse_foreign()?;
+                continue;
+            }
             let tok = self.peek()?;
             if tok.kind == TokenKind::BLOCK {
                 // Peek at the second token — if it's a var or ident this
@@ -96,7 +110,43 @@ impl<'a> Parser<'a> {
         Ok(Program {
             functions,
             main_code,
+            foreign: std::mem::take(&mut self.foreign),
         })
+    }
+
+    // ─── Foreign Declarations ───────────────────────────────────
+
+    /// Parse `x "header" .name !arity`.
+    fn parse_foreign(&mut self) -> Result<(), ParseError> {
+        self.advance()?;
+        let header_tok = self.advance()?;
+        let header = match header_tok.value {
+            Some(TokenValue::String(s)) => s,
+            _ => return Err(ParseError::ExpectedToken(TokenKind::STRING, header_tok.loc)),
+        };
+        let name_tok = self.advance()?;
+        let name = match name_tok.value {
+            Some(TokenValue::Ident(s)) => s,
+            _ => return Err(ParseError::ExpectedToken(TokenKind::IDENT, name_tok.loc)),
+        };
+        let arity_tok = self.advance()?;
+        let arity = match arity_tok.value {
+            Some(TokenValue::Num(n))
+                if n.fract() == 0.0 && (0.0..=MAX_FOREIGN_ARITY as f64).contains(&n) =>
+            {
+                n as usize
+            }
+            _ => return Err(ParseError::InvalidArity(arity_tok.loc)),
+        };
+        if self.foreign.iter().any(|f| f.name == name) {
+            return Err(ParseError::DuplicateForeign(name, name_tok.loc));
+        }
+        self.foreign.push(ForeignFn {
+            name,
+            header,
+            arity,
+        });
+        Ok(())
     }
 
     // ─── Functions ──────────────────────────────────────────────
@@ -161,6 +211,11 @@ impl<'a> Parser<'a> {
             } else {
                 0.0
             })),
+            TokenKind::CHAR => Ok(Op::Push(if let Some(TokenValue::Char(c)) = tok.value {
+                c as f64
+            } else {
+                0.0
+            })),
             TokenKind::VAR => Ok(Op::Var(VarName::Index(
                 if let Some(TokenValue::Var(n)) = tok.value {
                     n
@@ -201,6 +256,22 @@ impl<'a> Parser<'a> {
                 let body = self.parse_ops()?;
                 self.consume(TokenKind::WEND)?;
                 Ok(Op::While(body))
+            }
+            TokenKind::FOR => match self.parse_op()? {
+                Op::Block(body) => Ok(Op::For(body)),
+                _ => Err(ParseError::ExpectedToken(TokenKind::BLOCK, tok.loc)),
+            },
+            TokenKind::FfiDecl => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
+            TokenKind::FfiCall => {
+                let name_tok = self.advance()?;
+                let name = match name_tok.value {
+                    Some(TokenValue::Ident(s)) => s,
+                    _ => return Err(ParseError::ExpectedToken(TokenKind::IDENT, name_tok.loc)),
+                };
+                if !self.foreign.iter().any(|f| f.name == name) {
+                    return Err(ParseError::UndeclaredForeign(name, name_tok.loc));
+                }
+                Ok(Op::FfiCall(name))
             }
             TokenKind::BLOCK => {
                 let then_body = self.parse_ops()?;
