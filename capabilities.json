@@ -19,8 +19,10 @@
           ]
         },
         "numlang": {
-          "status": "partial",
-          "note": "all values are doubles; comparisons and logic yield 1.0/0.0, no integer type"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/integer_boolean.num"
+          ]
         },
         "selenium": {
           "status": "implemented",
@@ -43,8 +45,10 @@
       "description": "Arithmetic, bitwise, shift, comparison and logical operators.",
       "cells": {
         "plainspeak": {
-          "status": "partial",
-          "note": "operator differential cases exist only in the pending set"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/operators_integer.eng"
+          ]
         },
         "numlang": {
           "status": "implemented",
@@ -202,16 +206,22 @@
       "description": "Fixed-size arrays with element read and write.",
       "cells": {
         "plainspeak": {
-          "status": "partial",
-          "note": "native fixed arrays exist; differential case not yet in tree"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/fixed_arrays.eng"
+          ]
         },
         "numlang": {
-          "status": "missing",
-          "note": "no array type"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/arrays.num"
+          ]
         },
         "selenium": {
-          "status": "missing",
-          "note": "no array type"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/arrays.sel"
+          ]
         },
         "sigi": {
           "status": "implemented",
@@ -227,8 +237,10 @@
       "description": "String literals and printing them.",
       "cells": {
         "plainspeak": {
-          "status": "partial",
-          "note": "no differential test"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/strings.eng"
+          ]
         },
         "numlang": {
           "status": "implemented",
@@ -285,16 +297,22 @@
       "description": "Calling external C functions declared by a prototype and linked from a plain C source file.",
       "cells": {
         "plainspeak": {
-          "status": "missing",
-          "note": "no C interop"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/ffi_call.eng"
+          ]
         },
         "numlang": {
-          "status": "missing",
-          "note": "no C interop"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/ffi_call.num"
+          ]
         },
         "selenium": {
-          "status": "missing",
-          "note": "no C interop"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/ffi_call.sel"
+          ]
         },
         "sigi": {
           "status": "implemented",
