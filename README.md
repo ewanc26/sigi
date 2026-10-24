@@ -10,31 +10,29 @@ All syntax is symbolic. No alphanumeric keywords. User-defined names are prefixe
 
 ## Install
 
+Requires a Rust toolchain (`cargo`).
+
 ```sh
-pip install -e .
+cargo install --path .
 ```
 
-This installs the `sigic` compiler.
+This installs the `sigic` compiler into `~/.cargo/bin`.
 
 ## Usage
 
 ```sh
-# Interactive REPL
-sigic
+# Compile to C, written to stdout
+sigic hello.si
 
-# Compile to C
+# Compile to a C file
 sigic hello.si -o hello.c
 
-# Compile and run
+# Compile and run (uses gcc; override with --cc)
 sigic hello.si --run
-
-# Reference interpreter (faster startup)
-sigic hello.si --interpret
-
-# Debug — show tokens or AST
-sigic hello.si --emit-tokens
-sigic hello.si --emit-ast
+sigic hello.si --run --cc clang
 ```
+
+The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not implemented in the Rust compiler yet and currently print a message and exit.
 
 ## Symbol reference
 
