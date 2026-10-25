@@ -443,10 +443,7 @@ impl<'a> Parser<'a> {
                 Some(ty) => {
                     // `z.T` is the size of a type; a bare `z` measures the top value.
                     self.advance()?;
-                    Ok(Op::PushInt {
-                        value: ty.size() as i128,
-                        ty: NumType::U64,
-                    })
+                    Ok(Op::SizeOfType(ty))
                 }
                 None => Ok(Op::SizeOf),
             },

@@ -182,6 +182,10 @@ impl Codegen {
             Op::SizeOf => lines.push(format!(
                 "{prefix}pushv(sg_from_bits(SG_U64, sg_size(popv().t)));"
             )),
+            Op::SizeOfType(ty) => lines.push(format!(
+                "{prefix}pushv(sg_from_bits(SG_U64, sizeof({})));",
+                ty.c_type()
+            )),
             Op::Var(name) => match name {
                 VarName::Index(i) => lines.push(format!("{}pushv(vars[{}]);", prefix, i)),
                 VarName::Named(n) => lines.push(format!(
@@ -359,8 +363,8 @@ impl Codegen {
                     "EXIT" => lines.push(format!("{}exit((int)pop());", prefix)),
                     "TIME" => lines.push(format!("{}push((double)time(NULL));", prefix)),
                     "ALEN" => lines.push(format!("{}{{ int id = (int)pop(); push(array_sizes[id]); }}", prefix)),
-                    "ALOAD" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); push(*arr_slot(id, idx)); }}", prefix)),
-                    "ASTORE" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); double val = pop(); *arr_slot(id, idx) = val; }}", prefix)),
+                    "ALOAD" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); pushv(*arr_slot(id, idx)); }}", prefix)),
+                    "ASTORE" => lines.push(format!("{}{{ int idx = (int)pop(); int id = (int)pop(); sv val = popv(); *arr_slot(id, idx) = val; }}", prefix)),
                     "AINIT" => lines.push(format!("{}{{ int id = (int)pop(); int size = (int)pop(); arr_init(id, size); }}", prefix)),
                     "AFREE" => lines.push(format!("{}{{ int id = (int)pop(); arr_free(id); }}", prefix)),
                     "FILE_OPEN" => lines.push(format!("{}{{ int mode = (int)pop(); int len = (int)pop(); char *path = (char *)malloc(len + 1); for (int i = 0; i < len; i++) path[i] = (char)pop(); path[len] = '\\0'; FILE *f = fopen(path, mode == 0 ? \"r\" : \"w\"); free(path); push((double)fileno(f)); }}", prefix)),

@@ -4,10 +4,11 @@
  * at the top of every generated C file.
  *
  * Stack: fixed-size array of typed values with overflow/underflow guards.
- * Arrays: dynamically allocated, tracked by ID.
+ * Arrays: dynamically allocated, tracked by ID; each element is a typed value.
  * Variables: 100 indexed slots for numbered vars.
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -20,23 +21,24 @@
 /* ── Typed Values ──────────────────────────────────────────────────
  * Each stack slot and variable carries a numeric type.  Untyped numbers
  * (`!5`, `!2.5`) are SG_F64.  Integers are stored sign-extended in `s`
- * (signed types) or zero-extended in `u` (unsigned types).  Float types
- * keep their value in `d`, already rounded to float for SG_F32.
- * Conversions and the usual arithmetic conversions follow C.
+ * (signed types) or zero-extended in `u` (unsigned types).  SG_F64 and
+ * SG_F32 keep their value in `d`, already rounded to float for SG_F32.
+ * SG_LD keeps its value in `ld`.  Conversions and the usual arithmetic
+ * conversions follow C.
  */
 
-typedef enum { SG_F64, SG_F32, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U32, SG_I64, SG_U64 } sg_ty;
+typedef enum { SG_F64, SG_F32, SG_LD, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U32, SG_I64, SG_U64 } sg_ty;
 typedef enum { SG_OP_ADD, SG_OP_SUB, SG_OP_MUL, SG_OP_DIV, SG_OP_MOD } sg_op;
 typedef enum { SG_REL_EQ, SG_REL_LT, SG_REL_GT } sg_relop;
 
 typedef struct {
     sg_ty t;
-    union { double d; long long s; unsigned long long u; } v;
+    union { double d; long double ld; long long s; unsigned long long u; } v;
 } sv;
 
 static void sg_fail(const char *msg) { fprintf(stderr, "%s\n", msg); exit(1); }
 
-static int sg_is_float(sg_ty t) { return t == SG_F64 || t == SG_F32; }
+static int sg_is_float(sg_ty t) { return t == SG_F64 || t == SG_F32 || t == SG_LD; }
 
 static int sg_is_signed(sg_ty t) { return t == SG_I8 || t == SG_I16 || t == SG_I32 || t == SG_I64; }
 
@@ -51,6 +53,7 @@ static int sg_width(sg_ty t) {
 
 static unsigned long long sg_size(sg_ty t) {
     switch (t) {
+    case SG_LD: return sizeof(long double);
     case SG_F32: return 4;
     case SG_I8: case SG_U8: return 1;
     case SG_I16: case SG_U16: return 2;
@@ -80,30 +83,39 @@ static unsigned long long sg_bits_of(sv x) {
     return sg_is_signed(x.t) ? (unsigned long long)x.v.s : x.v.u;
 }
 
+/* The value of a float-typed sv, widened to long double. */
+static long double sg_fval(sv x) { return x.t == SG_LD ? x.v.ld : (long double)x.v.d; }
+
 /* Convert a value to type `to`.  Integer-to-integer conversions wrap; a
  * float outside the target range is an error (C leaves it undefined). */
 static sv sg_cast(sv x, sg_ty to) {
     sv r;
     r.t = to;
     if (to == SG_F64) {
-        r.v.d = sg_is_float(x.t) ? x.v.d : sg_is_signed(x.t) ? (double)x.v.s : (double)x.v.u;
+        r.v.d = sg_is_float(x.t) ? (double)sg_fval(x) : sg_is_signed(x.t) ? (double)x.v.s : (double)x.v.u;
         return r;
     }
     if (to == SG_F32) {
-        if (sg_is_float(x.t)) r.v.d = (float)x.v.d;
+        if (sg_is_float(x.t)) r.v.d = (float)sg_fval(x);
         else if (sg_is_signed(x.t)) r.v.d = (float)x.v.s;
         else r.v.d = (float)x.v.u;
         return r;
     }
+    if (to == SG_LD) {
+        if (sg_is_float(x.t)) r.v.ld = sg_fval(x);
+        else if (sg_is_signed(x.t)) r.v.ld = (long double)x.v.s;
+        else r.v.ld = (long double)x.v.u;
+        return r;
+    }
     if (sg_is_float(x.t)) {
-        double t = trunc(x.v.d);
+        long double t = truncl(sg_fval(x));
         int n = sg_width(to);
         if (sg_is_signed(to)) {
-            double lim = ldexp(1.0, n - 1);
+            long double lim = ldexpl(1.0L, n - 1);
             if (!(t >= -lim && t < lim)) sg_fail("Conversion out of range");
             return sg_from_bits(to, (unsigned long long)(long long)t);
         }
-        if (!(t >= 0.0 && t < ldexp(1.0, n))) sg_fail("Conversion out of range");
+        if (!(t >= 0.0L && t < ldexpl(1.0L, n))) sg_fail("Conversion out of range");
         return sg_from_bits(to, (unsigned long long)t);
     }
     return sg_from_bits(to, sg_bits_of(x));
@@ -112,10 +124,10 @@ static sv sg_cast(sv x, sg_ty to) {
 static double sg_to_double(sv x) { return sg_cast(x, SG_F64).v.d; }
 
 static long long sg_as_ll(sv x) {
-    return sg_is_float(x.t) ? (long long)x.v.d : (long long)sg_bits_of(x);
+    return sg_is_float(x.t) ? (long long)sg_fval(x) : (long long)sg_bits_of(x);
 }
 
-static int sg_truthy(sv x) { return sg_is_float(x.t) ? x.v.d != 0.0 : sg_bits_of(x) != 0; }
+static int sg_truthy(sv x) { return sg_is_float(x.t) ? sg_fval(x) != 0.0L : sg_bits_of(x) != 0; }
 
 static sg_ty sg_promote(sg_ty t) {
     return (t == SG_I8 || t == SG_U8 || t == SG_I16 || t == SG_U16) ? SG_I32 : t;
@@ -123,6 +135,7 @@ static sg_ty sg_promote(sg_ty t) {
 
 /* The common type of a binary operation (C's usual arithmetic conversions). */
 static sg_ty sg_common(sg_ty a, sg_ty b) {
+    if (a == SG_LD || b == SG_LD) return SG_LD;
     if (a == SG_F64 || b == SG_F64) return SG_F64;
     if (a == SG_F32 || b == SG_F32) return SG_F32;
     a = sg_promote(a);
@@ -139,6 +152,18 @@ static sv sg_arith(sg_op op, sv a, sv b) {
     sg_ty t = sg_common(a.t, b.t);
     sv x = sg_cast(a, t), y = sg_cast(b, t), r;
     r.t = t;
+    if (t == SG_LD) {
+        long double p = x.v.ld, q = y.v.ld, out = 0.0L;
+        switch (op) {
+        case SG_OP_ADD: out = p + q; break;
+        case SG_OP_SUB: out = p - q; break;
+        case SG_OP_MUL: out = p * q; break;
+        case SG_OP_DIV: out = p / q; break;
+        case SG_OP_MOD: out = fmodl(p, q); break;
+        }
+        r.v.ld = out;
+        return r;
+    }
     if (t == SG_F64) {
         double p = x.v.d, q = y.v.d;
         switch (op) {
@@ -184,9 +209,10 @@ static int sg_rel(sg_relop op, sv a, sv b) {
     sv x = sg_cast(a, t), y = sg_cast(b, t);
     int cmp;
     if (sg_is_float(t)) {
-        if (x.v.d == y.v.d) cmp = 0;
-        else if (x.v.d < y.v.d) cmp = -1;
-        else if (x.v.d > y.v.d) cmp = 1;
+        long double p = sg_fval(x), q = sg_fval(y);
+        if (p == q) cmp = 0;
+        else if (p < q) cmp = -1;
+        else if (p > q) cmp = 1;
         else return 0;
     } else if (sg_is_signed(t)) {
         cmp = (x.v.s > y.v.s) - (x.v.s < y.v.s);
@@ -201,7 +227,8 @@ static int sg_rel(sg_relop op, sv a, sv b) {
 }
 
 static void sg_print(sv x) {
-    if (sg_is_float(x.t)) printf("%g\n", x.v.d);
+    if (x.t == SG_LD) printf("%Lg\n", x.v.ld);
+    else if (sg_is_float(x.t)) printf("%g\n", x.v.d);
     else if (sg_is_signed(x.t)) printf("%lld\n", x.v.s);
     else printf("%llu\n", x.v.u);
 }
@@ -209,14 +236,14 @@ static void sg_print(sv x) {
 static sv stack[STACK_SIZE];
 static int sp = 0;
 static sv vars[100];
-static double *arrays[MAX_ARRAYS];
+static sv *arrays[MAX_ARRAYS];
 static int array_sizes[MAX_ARRAYS];
 
 /* ── Array Helpers ─────────────────────────────────────────────── */
 
 static void arr_init(int id, int size) {
     if (id < 0 || id >= MAX_ARRAYS) { fprintf(stderr, "Array ID out of range\n"); exit(1); }
-    arrays[id] = (double *)calloc(size, sizeof(double));
+    arrays[id] = (sv *)calloc(size, sizeof(sv));
     array_sizes[id] = size;
 }
 
@@ -225,7 +252,7 @@ static void arr_free(int id) {
     if (arrays[id]) { free(arrays[id]); arrays[id] = NULL; array_sizes[id] = 0; }
 }
 
-static double *arr_slot(int id, int index) {
+static sv *arr_slot(int id, int index) {
     if (id < 0 || id >= MAX_ARRAYS || !arrays[id]) { fprintf(stderr, "Array not allocated\n"); exit(1); }
     if (index < 0 || index >= array_sizes[id]) { fprintf(stderr, "Array index out of range\n"); exit(1); }
     return &arrays[id][index];

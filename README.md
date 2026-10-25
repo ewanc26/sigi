@@ -111,7 +111,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `s{ k!n body m body }` | SWITCH | Pop selector; `k!n` starts a case, `m` the default; arms fall through as in C |
 | `o.name` / `o<n>` | FUNC_REF | Push the index of a function |
 | `p` | CALL_PTR | Pop a function index and call that function |
-| `i.T` | CAST | Pop a, push it converted to type T (`f32`, `f64`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`); integer casts wrap, out-of-range float casts exit 1 |
+| `i.T` | CAST | Pop a, push it converted to type T (`f32`, `f64`, `ld`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`); integer casts wrap, out-of-range float casts exit 1. `ld` is C `long double`, whose width is the target's |
 | `z` | SIZEOF | Pop a, push its size in bytes (`u64`) |
 | `z.T` | SIZEOF_TYPE | Push the size in bytes of type T |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |

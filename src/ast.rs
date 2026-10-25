@@ -19,6 +19,8 @@ pub struct SourceLocation {
 pub enum NumType {
     F64,
     F32,
+    /// `long double`; its width is the C target's.
+    LongDouble,
     I8,
     U8,
     I16,
@@ -35,6 +37,7 @@ impl NumType {
         Some(match name {
             "f64" => Self::F64,
             "f32" => Self::F32,
+            "ld" => Self::LongDouble,
             "i8" => Self::I8,
             "u8" => Self::U8,
             "i16" => Self::I16,
@@ -47,13 +50,20 @@ impl NumType {
         })
     }
 
-    /// Size in bytes, matching C on LP64 targets.
-    pub fn size(self) -> u64 {
+    /// The C type this sigi type lowers to.
+    pub fn c_type(self) -> &'static str {
         match self {
-            Self::I8 | Self::U8 => 1,
-            Self::I16 | Self::U16 => 2,
-            Self::F32 | Self::I32 | Self::U32 => 4,
-            Self::F64 | Self::I64 | Self::U64 => 8,
+            Self::F64 => "double",
+            Self::F32 => "float",
+            Self::LongDouble => "long double",
+            Self::I8 => "int8_t",
+            Self::U8 => "uint8_t",
+            Self::I16 => "int16_t",
+            Self::U16 => "uint16_t",
+            Self::I32 => "int32_t",
+            Self::U32 => "uint32_t",
+            Self::I64 => "int64_t",
+            Self::U64 => "uint64_t",
         }
     }
 
@@ -62,6 +72,7 @@ impl NumType {
         match self {
             Self::F64 => "SG_F64",
             Self::F32 => "SG_F32",
+            Self::LongDouble => "SG_LD",
             Self::I8 => "SG_I8",
             Self::U8 => "SG_U8",
             Self::I16 => "SG_I16",
@@ -88,6 +99,8 @@ pub enum Op {
     Cast(NumType),
     /// Pop a value and push its size in bytes, written `z`.
     SizeOf,
+    /// Push the size in bytes of a type, written `z.T`.
+    SizeOfType(NumType),
     /// Push the value of a variable (indexed or named).
     Var(VarName),
     /// Call a function by index or name.

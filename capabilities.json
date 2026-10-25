@@ -79,8 +79,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "partial",
-          "note": "f64 (double) and f32 (float) with C conversion and arithmetic; long double is not modeled; arrays store doubles"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_floating.si"
+          ]
         }
       }
     },
