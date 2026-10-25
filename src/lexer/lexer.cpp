@@ -58,6 +58,8 @@ std::vector<Token> Lexer::tokenize(){
             int sl=line,sc=col; advance();
             if(std::isdigit(peek())){
                 std::string n; while(std::isdigit(peek())) n+=advance();
+                if(peek()=='>') advance();
+                else throw std::runtime_error("unterminated numbered variable at line " + std::to_string(sl));
                 tokens.push_back(Token{"LOADVAR",0,(long long)std::stoi(n),{},{},sl,sc});
             }else if(peek()=='>'){ advance(); tokens.push_back(Token{"BREAK",0,0,{},{},sl,sc}); }
             else tokens.push_back(Token{"LT",0,0,{},{},sl,sc});
