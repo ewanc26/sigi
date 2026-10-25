@@ -64,6 +64,10 @@ pub enum ParseError {
     DuplicateMember(String, SourceLocation),
     #[error("{0} is a struct and cannot be stored to directly at {1:?}")]
     NotAssignable(String, SourceLocation),
+    #[error("Array {0} takes no initializer at {1:?}")]
+    ArrayInit(String, SourceLocation),
+    #[error("Array dimension must be a positive integer literal at {0:?}")]
+    InvalidDim(SourceLocation),
     #[error("Too many initializers for {0} at {1:?}")]
     TooManyInitializers(String, SourceLocation),
     #[error("Object {0} needs a struct type at {1:?}")]
@@ -88,7 +92,7 @@ pub struct Parser<'a> {
     typedefs: HashMap<String, NumType>,
     aggregates: Vec<AggregateDef>,
     agg_index: HashMap<String, usize>,
-    objects: HashMap<String, String>,
+    objects: HashMap<String, bool>,
     object_list: Vec<ObjectDecl>,
 }
 
@@ -357,7 +361,9 @@ impl<'a> Parser<'a> {
     // ─── Declarations ───────────────────────────────────────────
 
     /// Parse a declaration that starts with `r` (struct) or `u` (union): a
-    /// definition `r.Name{ ... }` or an object declaration `r .Name .obj`.
+    /// definition `r.Name{ ... }`, or an object `r .T [ !N ... ] .name [= ...]`
+    /// where T is a scalar or a struct and the optional `[ ]` gives array
+    /// dimensions.
     fn parse_decl(&mut self) -> Result<(), ParseError> {
         let keyword = self.advance()?;
         let is_union = keyword.kind == TokenKind::UNION;
@@ -369,12 +375,14 @@ impl<'a> Parser<'a> {
         if is_union {
             return Err(ParseError::ExpectedToken(TokenKind::BLOCK, first.loc));
         }
-        if !self.agg_index.contains_key(&first_name) {
-            if self.resolve_type(&first_name).is_some() {
-                return Err(ParseError::ObjectNeedsStruct(first_name, first.loc));
-            }
-            return Err(ParseError::UnknownType(first_name, first.loc));
-        }
+        let elem = self
+            .resolve_typeref(&first_name)
+            .ok_or_else(|| ParseError::UnknownType(first_name.clone(), first.loc))?;
+        let dims = if self.peek()?.kind == TokenKind::WHILE {
+            self.parse_dims()?
+        } else {
+            Vec::new()
+        };
         let name_tok = self.advance()?;
         let name = ident_name(name_tok.clone())?;
         if self.objects.contains_key(&name)
@@ -384,18 +392,63 @@ impl<'a> Parser<'a> {
             return Err(ParseError::DuplicateDefinition(name, name_tok.loc));
         }
         let init = if self.peek()?.kind == TokenKind::EQ {
-            self.advance()?;
-            Some(self.parse_init(&first_name)?)
+            let eq = self.advance()?;
+            if !dims.is_empty() {
+                return Err(ParseError::ArrayInit(name, eq.loc));
+            }
+            Some(match &elem {
+                TypeRef::Scalar(_) => Init::Num(self.parse_num_op()?),
+                TypeRef::Aggregate(agg) => {
+                    let agg = agg.clone();
+                    self.parse_init(&agg)?
+                }
+            })
         } else {
             None
         };
-        self.objects.insert(name.clone(), first_name.clone());
+        // Only a plain scalar object is assigned with `:.name`.
+        let assignable = dims.is_empty() && matches!(elem, TypeRef::Scalar(_));
+        self.objects.insert(name.clone(), assignable);
         self.object_list.push(ObjectDecl {
             name,
-            agg: first_name,
+            elem,
+            dims,
             init,
         });
         Ok(())
+    }
+
+    /// Parse array dimensions `[ !N !M ... ]`. Each must be a positive
+    /// integer literal.
+    fn parse_dims(&mut self) -> Result<Vec<u64>, ParseError> {
+        let open = self.advance()?;
+        let mut dims = Vec::new();
+        while self.peek()?.kind != TokenKind::WEND {
+            let tok = self.advance()?;
+            match integer_literal(&tok) {
+                Some(n) if n > 0 && n <= u32::MAX as i128 && tok.kind == TokenKind::NUM => {
+                    dims.push(n as u64)
+                }
+                _ => return Err(ParseError::InvalidDim(tok.loc)),
+            }
+        }
+        self.advance()?;
+        if dims.is_empty() {
+            return Err(ParseError::InvalidDim(open.loc));
+        }
+        Ok(dims)
+    }
+
+    /// Parse one numeric literal token as a constant operation.
+    fn parse_num_op(&mut self) -> Result<Op, ParseError> {
+        let num = self.advance()?;
+        match num.value {
+            Some(TokenValue::Int(value, ty)) if num.kind == TokenKind::NUM => {
+                Ok(Op::PushInt { value, ty })
+            }
+            Some(TokenValue::Num(n)) if num.kind == TokenKind::NUM => Ok(Op::Push(n)),
+            _ => Err(ParseError::ExpectedToken(TokenKind::NUM, num.loc)),
+        }
     }
 
     /// Parse the brace list that initializes a struct object. Each element
@@ -418,17 +471,7 @@ impl<'a> Parser<'a> {
                 .get(values.len())
                 .ok_or_else(|| ParseError::TooManyInitializers(agg.to_string(), tok.loc))?;
             match &field.ty {
-                TypeRef::Scalar(_) => {
-                    let num = self.advance()?;
-                    let op = match num.value {
-                        Some(TokenValue::Int(value, ty)) if num.kind == TokenKind::NUM => {
-                            Op::PushInt { value, ty }
-                        }
-                        Some(TokenValue::Num(n)) if num.kind == TokenKind::NUM => Op::Push(n),
-                        _ => return Err(ParseError::ExpectedToken(TokenKind::NUM, num.loc)),
-                    };
-                    values.push(Init::Num(op));
-                }
+                TypeRef::Scalar(_) => values.push(Init::Num(self.parse_num_op()?)),
                 TypeRef::Aggregate(sub) => {
                     let sub = sub.clone();
                     values.push(self.parse_init(&sub)?);
@@ -666,7 +709,7 @@ impl<'a> Parser<'a> {
                 if self.enum_consts.contains_key(&name) {
                     return Err(ParseError::NameConflict(name, tok.loc));
                 }
-                if self.objects.contains_key(&name) {
+                if self.objects.get(&name) == Some(&false) {
                     return Err(ParseError::NotAssignable(name, tok.loc));
                 }
                 self.named_refs.insert(name.clone());

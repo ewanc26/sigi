@@ -287,8 +287,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "arrays are flat and one-dimensional with runtime IDs"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_multidim.si"
+          ]
         }
       }
     },

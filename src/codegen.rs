@@ -4,7 +4,7 @@
 //! fixed stack array and runtime prelude.  The generated code is
 //! portable C99 and links against libm.
 
-use crate::ast::{walk_ops, Init, Op, Program, TargetName, TypeRef, VarName};
+use crate::ast::{walk_ops, Init, NumType, ObjectDecl, Op, Program, TargetName, TypeRef, VarName};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct Codegen {
@@ -106,7 +106,7 @@ impl Codegen {
 
         let mut sorted_vars: Vec<_> = named_vars
             .into_iter()
-            .filter(|name| self.object_agg(name).is_none())
+            .filter(|name| self.object(name).is_none())
             .collect();
         sorted_vars.sort();
 
@@ -117,15 +117,26 @@ impl Codegen {
             ));
         }
         for object in &self.program.objects {
-            let init = match &object.init {
-                Some(Init::List(values)) => format!(" = {}", self.init_list(&object.agg, values)),
+            let var = self.c_ident(&TargetName::Named(object.name.clone()));
+            if !object.dims.is_empty() {
+                let dims: Vec<String> = object.dims.iter().map(|d| d.to_string()).collect();
+                lines.push(format!("const size_t dims_{var}[] = {{{}}};", dims.join(", ")));
+            }
+            let ctype = match &object.elem {
+                TypeRef::Scalar(t) => t.c_type().to_string(),
+                TypeRef::Aggregate(agg) => self.agg_type(agg),
+            };
+            let extents: String = object.dims.iter().map(|d| format!("[{d}]")).collect();
+            let init = match (&object.init, &object.elem) {
+                (Some(Init::Num(op)), TypeRef::Scalar(t)) => {
+                    format!(" = {}", num_text(op, t.c_type()))
+                }
+                (Some(Init::List(values)), TypeRef::Aggregate(agg)) => {
+                    format!(" = {}", self.init_list(agg, values))
+                }
                 _ => String::new(),
             };
-            lines.push(format!(
-                "{} var_{}{init};",
-                self.agg_type(&object.agg),
-                self.c_ident(&TargetName::Named(object.name.clone()))
-            ));
+            lines.push(format!("{ctype} var_{var}{extents}{init};"));
         }
 
         // ─── Forward Declarations ────────────────────────────────
@@ -223,13 +234,21 @@ impl Codegen {
         }
     }
 
-    /// The struct a named object was declared with, if `name` is an object.
-    fn object_agg(&self, name: &str) -> Option<&str> {
-        self.program
-            .objects
-            .iter()
-            .find(|o| o.name == name)
-            .map(|o| o.agg.as_str())
+    /// The declaration of a named object, if `name` is one.
+    fn object(&self, name: &str) -> Option<&ObjectDecl> {
+        self.program.objects.iter().find(|o| o.name == name)
+    }
+
+    /// The scalar type of a single scalar object (no array dimensions).
+    fn scalar_object(&self, name: &str) -> Option<NumType> {
+        match self.object(name) {
+            Some(ObjectDecl {
+                elem: TypeRef::Scalar(t),
+                dims,
+                ..
+            }) if dims.is_empty() => Some(*t),
+            _ => None,
+        }
     }
 
     /// The C identifier for a sigi struct or union name.
@@ -272,18 +291,30 @@ impl Codegen {
         format!("{keyword} {}", self.agg_tag(name))
     }
 
-    /// C expression for a pointer to a named object, or to a variable cell.
+    /// C expression for a pointer to a named variable or object. An array
+    /// yields a pointer to its first element (or to its first row, when it
+    /// has more than one dimension), which is how C decays arrays.
     fn named_addr(&self, name: &str) -> String {
-        match self.object_agg(name) {
-            Some(agg) => format!(
-                "sg_agg_ptr(&var_{}, &{}_desc)",
+        let var = format!("var_{}", self.c_ident(&TargetName::Named(name.to_string())));
+        let Some(object) = self.object(name) else {
+            return format!("sg_ptr_to(&{var})");
+        };
+        let (ekind, pt, agg) = match &object.elem {
+            TypeRef::Scalar(t) => ("SG_PK_SCALAR", t.c_tag().to_string(), "NULL".to_string()),
+            TypeRef::Aggregate(a) => (
+                "SG_PK_AGG",
+                "SG_F64".to_string(),
+                format!("&{}_desc", self.agg_tag(a)),
+            ),
+        };
+        if object.dims.len() > 1 {
+            format!(
+                "sg_array_ptr(&{var}, {ekind}, {pt}, {agg}, dims_{} + 1, {})",
                 self.c_ident(&TargetName::Named(name.to_string())),
-                self.agg_tag(agg)
-            ),
-            None => format!(
-                "sg_ptr_to(&var_{})",
-                self.c_ident(&TargetName::Named(name.to_string()))
-            ),
+                object.dims.len() - 1
+            )
+        } else {
+            format!("sg_ptr_value(&{var}, {ekind}, {pt}, {agg})")
         }
     }
 
@@ -329,7 +360,15 @@ impl Codegen {
             }
             Op::Var(name) => match name {
                 VarName::Index(i) => lines.push(format!("{}pushv(vars[{}]);", prefix, i)),
-                VarName::Named(n) if self.object_agg(n).is_some() => {
+                VarName::Named(n) if self.scalar_object(n).is_some() => {
+                    let t = self.scalar_object(n).unwrap_or(NumType::F64);
+                    lines.push(format!(
+                        "{prefix}pushv(sg_read_scalar(&var_{}, {}));",
+                        self.c_ident(&TargetName::Named(n.clone())),
+                        t.c_tag()
+                    ))
+                }
+                VarName::Named(n) if self.object(n).is_some() => {
                     lines.push(format!("{prefix}pushv({});", self.named_addr(n)))
                 }
                 VarName::Named(n) => lines.push(format!(
@@ -342,13 +381,18 @@ impl Codegen {
                 VarName::Index(i) => lines.push(format!("{prefix}pushv(sg_ptr_to(&vars[{i}]));")),
                 VarName::Named(n) => lines.push(format!("{prefix}pushv({});", self.named_addr(n))),
             },
-            Op::StoreNamed(name) => {
-                lines.push(format!(
+            Op::StoreNamed(name) => match self.scalar_object(name) {
+                Some(t) => lines.push(format!(
+                    "{prefix}sg_write_scalar(&var_{}, {}, popv());",
+                    self.c_ident(&TargetName::Named(name.clone())),
+                    t.c_tag()
+                )),
+                None => lines.push(format!(
                     "{}var_{} = popv();",
                     prefix,
                     self.c_ident(&TargetName::Named(name.clone()))
-                ));
-            }
+                )),
+            },
             Op::Char(byte) => {
                 lines.push(format!("{}push('\\x{:02x}');", prefix, byte));
             }

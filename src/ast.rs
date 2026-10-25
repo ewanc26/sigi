@@ -213,12 +213,14 @@ pub enum Init {
     List(Vec<Init>),
 }
 
-/// A named struct object declared with `r .Name .obj`, optionally with
-/// `= { ... }`.  It is a C struct variable of the named struct type.
+/// A named object declared with `r .T [ !N ... ] .name`, optionally with
+/// `= ...`.  It is a C variable (or array) of the scalar or struct type T.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectDecl {
     pub name: String,
-    pub agg: String,
+    pub elem: TypeRef,
+    /// Array dimensions, outermost first; empty for a single object.
+    pub dims: Vec<u64>,
     pub init: Option<Init>,
 }
 

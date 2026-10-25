@@ -35,7 +35,7 @@ typedef enum { SG_REL_EQ, SG_REL_LT, SG_REL_GT } sg_relop;
 
 /* What a pointer addresses: a variable cell (an sv), one scalar member of
  * a struct, or a whole struct object. */
-typedef enum { SG_PK_CELL, SG_PK_SCALAR, SG_PK_AGG } sg_pk;
+typedef enum { SG_PK_CELL, SG_PK_SCALAR, SG_PK_AGG, SG_PK_ARRAY } sg_pk;
 
 typedef struct sg_agg sg_agg;
 
@@ -60,6 +60,9 @@ typedef struct {
     sg_pk kind;
     sg_ty pt;             /* scalar type when kind is SG_PK_SCALAR */
     const sg_agg *agg;    /* struct descriptor when kind is SG_PK_AGG */
+    sg_pk ekind;          /* leaf kind of an SG_PK_ARRAY: SCALAR or AGG */
+    const size_t *dims;   /* SG_PK_ARRAY: the extents of the array addressed */
+    int nd;               /* number of entries in dims */
 } sg_ptr;
 
 typedef struct {
@@ -183,8 +186,10 @@ static sg_ty sg_common(sg_ty a, sg_ty b) {
 
 /* Arithmetic in the common type.  Integer overflow wraps (C leaves it
  * undefined); integer division by zero is an error. */
+static sv sg_ptr_arith(sg_op op, sv a, sv b);
+
 static sv sg_arith(sg_op op, sv a, sv b) {
-    if (a.t == SG_PTR || b.t == SG_PTR) sg_fail("Invalid arithmetic on a pointer");
+    if (a.t == SG_PTR || b.t == SG_PTR) return sg_ptr_arith(op, a, b);
     sg_ty t = sg_common(a.t, b.t);
     sv x = sg_cast(a, t), y = sg_cast(b, t), r;
     r.t = t;
@@ -349,6 +354,9 @@ static sv sg_ptr_value(void *addr, sg_pk kind, sg_ty pt, const sg_agg *agg) {
     r.v.ptr.kind = kind;
     r.v.ptr.pt = pt;
     r.v.ptr.agg = agg;
+    r.v.ptr.ekind = kind;
+    r.v.ptr.dims = NULL;
+    r.v.ptr.nd = 0;
     return r;
 }
 
@@ -356,6 +364,60 @@ static sv sg_ptr_to(sv *cell) { return sg_ptr_value(cell, SG_PK_CELL, SG_F64, NU
 
 static sv sg_agg_ptr(void *obj, const sg_agg *agg) {
     return sg_ptr_value(obj, SG_PK_AGG, SG_F64, agg);
+}
+
+/* A pointer to a multi-dimensional array with extents dims[0..nd): it
+ * addresses the first of its elements, whose leaves are ekind/pt/agg. */
+static sv sg_array_ptr(void *addr, sg_pk ekind, sg_ty pt, const sg_agg *agg, const size_t *dims, int nd) {
+    sv r = sg_ptr_value(addr, SG_PK_ARRAY, pt, agg);
+    r.v.ptr.ekind = ekind;
+    r.v.ptr.dims = dims;
+    r.v.ptr.nd = nd;
+    return r;
+}
+
+static size_t sg_ty_size(sg_ty t) {
+    switch (t) {
+    case SG_F64: return sizeof(double);
+    case SG_F32: return sizeof(float);
+    case SG_LD: return sizeof(long double);
+    case SG_I8: case SG_U8: return 1;
+    case SG_I16: case SG_U16: return 2;
+    case SG_I32: case SG_U32: return 4;
+    default: return 8;
+    }
+}
+
+/* Bytes spanned by one step of pointer arithmetic: the size of the object
+ * the pointer addresses (for an array, the whole array). */
+static size_t sg_step(sv p) {
+    const sg_ptr *q = &p.v.ptr;
+    switch (q->kind) {
+    case SG_PK_SCALAR: return sg_ty_size(q->pt);
+    case SG_PK_AGG: return q->agg->size;
+    case SG_PK_ARRAY: {
+        size_t n = q->ekind == SG_PK_AGG ? q->agg->size : sg_ty_size(q->pt);
+        for (int i = 0; i < q->nd; i++) n *= q->dims[i];
+        return n;
+    }
+    default: sg_fail("Pointer arithmetic needs a pointer to typed memory");
+    }
+    return 0;
+}
+
+/* Pointer plus or minus an integer, scaled by the size of the pointee. */
+static sv sg_ptr_arith(sg_op op, sv a, sv b) {
+    if (op != SG_OP_ADD && op != SG_OP_SUB) sg_fail("Invalid arithmetic on a pointer");
+    if (a.t != SG_PTR) {
+        if (b.t != SG_PTR || op == SG_OP_SUB) sg_fail("Pointer arithmetic needs a pointer operand");
+        sv t = a; a = b; b = t;
+    }
+    if (b.t == SG_PTR) sg_fail("Pointer arithmetic needs an integer operand");
+    long long n = sg_as_ll(b);
+    if (op == SG_OP_SUB) n = -n;
+    sv r = a;
+    r.v.ptr.addr = (char *)a.v.ptr.addr + n * (long long)sg_step(a);
+    return r;
 }
 
 /* Load a scalar of type t from typed memory. */
@@ -398,9 +460,14 @@ static void sg_write_scalar(void *addr, sg_ty t, sv val) {
 
 static sv sg_deref(sv p) {
     if (p.t != SG_PTR) sg_fail("Dereference of a non-pointer");
-    switch (p.v.ptr.kind) {
-    case SG_PK_CELL: return *(sv *)p.v.ptr.addr;
-    case SG_PK_SCALAR: return sg_read_scalar(p.v.ptr.addr, p.v.ptr.pt);
+    const sg_ptr *q = &p.v.ptr;
+    switch (q->kind) {
+    case SG_PK_CELL: return *(sv *)q->addr;
+    case SG_PK_SCALAR: return sg_read_scalar(q->addr, q->pt);
+    case SG_PK_ARRAY:
+        /* An array decays: its first element is a row, or a leaf for one dimension. */
+        if (q->nd > 1) return sg_array_ptr(q->addr, q->ekind, q->pt, q->agg, q->dims + 1, q->nd - 1);
+        return sg_ptr_value(q->addr, q->ekind, q->pt, q->agg);
     default: sg_fail("A struct has no single value; load a member");
     }
     return p;

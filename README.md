@@ -122,6 +122,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `r.Name .obj = { ... }` | DECL | Declare a struct object, filling members in order from a brace list; nested braces fill struct members, and missing members are zeroed |
 | `u.Name{ .f .T ... }` | UNION | Define union Name; members share storage, each starting at offset 0 |
 | `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
+| `r .T [ !N ... ] .name` | DECL | Declare an array of scalar or struct type T with the given extents (one or more, after the type). A multi-dimensional array decays to a pointer to its rows. `+`/`-` on a pointer step by the size of what it addresses, so for a row pointer one step is a whole row |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
 ## Error handling

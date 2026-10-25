@@ -1,0 +1,10 @@
+\\ Multi-dimensional arrays: a row decays to a pointer, and + steps by whole rows.
+r .i32 [ !3 !4 ] .m
+r .f64 [ !3 ] .v
+!7 j.m !1 + y !2 + :
+!5 j.m !2 + y !3 + :
+j.m y y |
+j.m !1 + y !2 + y |
+j.m !2 + y !3 + y |
+!2.5 j.v !2 + :
+j.v !2 + y |
