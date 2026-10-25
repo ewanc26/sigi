@@ -12,7 +12,7 @@ Program Parser::parse(){
     while(!eof()){
         const Token &t = peek();
         SOp op;
-        if(t.kind=="NUM"){ op.kind=SOp::PushNum; op.num=t.value; op.ival=t.ival; advance(); mainOps.push_back(op); continue; }
+        if(t.kind=="NUM"){ op.kind=SOp::PushNum; op.num=(t.value==0.0 ? static_cast<double>(t.ival) : t.value); op.ival=t.ival; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="STRING"){ op.kind=SOp::StringLit; op.strvals=t.strvals; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="CHAR"){ op.kind=SOp::CharLit; op.ival=t.ival; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="LOADVAR"){ if(t.ival < 0 || t.ival >= 100) throw std::runtime_error("Numbered variable index must be between 0 and 99"); op.kind=SOp::LoadVar; op.varIndex=(int)t.ival; advance(); mainOps.push_back(op); continue; }
