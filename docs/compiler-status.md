@@ -26,7 +26,7 @@ The source and CLI smoke tests currently cover these basics:
 - Numbered variables: `<n>` to load and `:` to store.
 - Numeric output `|`, character output `^`, and numeric input `?`.
 
-This is a source-inspected implementation boundary, not a claim of C conformance or full language completeness. Stack underflow/overflow still need explicit runtime checks. Load indices are checked during parsing and stores check the numbered-variable range at runtime.
+This is a source-inspected implementation boundary, not a claim of C conformance or full language completeness. Generated C now checks stack underflow and overflow for stack operations, rejects division and remainder by zero, and diagnoses failed numeric input. Load indices are checked during parsing and stores check the numbered-variable range at runtime.
 
 ## Not yet implemented end-to-end
 
