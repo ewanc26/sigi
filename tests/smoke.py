@@ -57,6 +57,24 @@ def main() -> int:
         if "variable index out of range" not in result.stderr:
             raise AssertionError(f"out-of-range variable store was not diagnosed: {result.stderr!r}")
 
+        underflow = temp / "stack underflow.si"
+        underflow.write_text("+", encoding="utf-8")
+        failure = run([compiler, str(underflow), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "stack underflow" not in failure.stderr:
+            raise AssertionError(f"stack underflow was not diagnosed: {failure.stderr!r}")
+
+        overflow = temp / "stack overflow.si"
+        overflow.write_text("!1 " * 10001, encoding="utf-8")
+        failure = run([compiler, str(overflow), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "stack overflow" not in failure.stderr:
+            raise AssertionError(f"stack overflow was not diagnosed: {failure.stderr!r}")
+
+        divide_by_zero = temp / "division by zero.si"
+        divide_by_zero.write_text("!1 !0 /", encoding="utf-8")
+        failure = run([compiler, str(divide_by_zero), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "division by zero" not in failure.stderr:
+            raise AssertionError(f"division by zero was not diagnosed: {failure.stderr!r}")
+
         missing = temp / "missing source.si"
         failure = run([compiler, str(missing), "-o", str(output_c)], expected_status=1)
         if "cannot read source file" not in failure.stderr:
