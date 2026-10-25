@@ -1,0 +1,34 @@
+\\ A small calculator. Each operator is a function that takes its operands
+\\ from the stack. The ops table holds function indices, and a program is a
+\\ table of (op, a, b) steps. Dividing by zero exits with status 4.
+{.add + }
+{.sub - }
+{.mul * }
+{.div @ !0 = { $ $ !4 X ; / } }
+r .f64 [ !4 ] .table
+o.add j.table !0 + :
+o.sub j.table !1 + :
+o.mul j.table !2 + :
+o.div j.table !3 + :
+r.Step{ .op .i32 .a .f64 .b .f64 }
+r .Step [ !4 ] .prog
+!0 j.prog !0 + n.op :
+!12 j.prog !0 + n.a :
+!30 j.prog !0 + n.b :
+!2 j.prog !1 + n.op :
+!6 j.prog !1 + n.a :
+!7 j.prog !1 + n.b :
+!1 j.prog !2 + n.op :
+!100 j.prog !2 + n.a :
+!58 j.prog !2 + n.b :
+!3 j.prog !3 + n.op :
+!84 j.prog !3 + n.a :
+!0 j.prog !3 + n.b :
+!0 :.pc
+!4 f{
+  j.prog .pc + n.a y
+  j.prog .pc + n.b y
+  j.table j.prog .pc + n.op y + y p
+  |
+  .pc !1 + :.pc
+}

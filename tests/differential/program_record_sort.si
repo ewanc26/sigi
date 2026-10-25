@@ -1,0 +1,40 @@
+\\ A record table of struct elements, filled in place, then sorted by key with
+\\ a selection sort. Structs cannot be stored whole, so each swap moves the
+\\ key and weight members separately.
+r.Rec{ .key .i32 .weight .f64 }
+r .Rec [ !5 ] .table
+!42 j.table !0 + n.key :
+!1.5 j.table !0 + n.weight :
+!7 j.table !1 + n.key :
+!9.25 j.table !1 + n.weight :
+!19 j.table !2 + n.key :
+!3 j.table !2 + n.weight :
+!3 j.table !3 + n.key :
+!0.5 j.table !3 + n.weight :
+!27 j.table !4 + n.key :
+!6.75 j.table !4 + n.weight :
+!0 :.i
+!4 f{
+  .i :.m
+  .i !1 + :.j
+  !4 .i - f{
+    j.table .j + n.key y j.table .m + n.key y < { .j :.m ; }
+    .j !1 + :.j
+  }
+  j.table .m + n.key y :.kmin
+  j.table .i + n.key y :.kcur
+  .kmin j.table .i + n.key :
+  .kcur j.table .m + n.key :
+  j.table .m + n.weight y :.wmin
+  j.table .i + n.weight y :.wcur
+  .wmin j.table .i + n.weight :
+  .wcur j.table .m + n.weight :
+  .i !1 + :.i
+}
+"key weight\n"
+!0 :.i
+!5 f{
+  j.table .i + n.key y |
+  j.table .i + n.weight y |
+  .i !1 + :.i
+}
