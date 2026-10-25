@@ -62,6 +62,18 @@ std::string emitSigi(const Program &p) {
             ss << "    printf(\"%c\", (char)sigi_pop()); fflush(stdout);\n";
         } else if (op.kind == SOp::Input) {
             ss << "    { double x; if (scanf(\"%lf\", &x) != 1) sigi_fail(\"numeric input failed\"); sigi_push(x); }\n";
+        } else if (op.kind == SOp::WhileStart) {
+            ss << "    while (sp > 0 && stack[sp-1] != 0) {\\n";
+        } else if (op.kind == SOp::WhileEnd) {
+            ss << "    }\\n";
+        } else if (op.kind == SOp::IfStart) {
+            ss << "    if (sigi_pop() != 0) {\\n";
+        } else if (op.kind == SOp::IfElse) {
+            ss << "    } else {\\n";
+        } else if (op.kind == SOp::IfEnd) {
+            ss << "    }\\n";
+        } else if (op.kind == SOp::Break) {
+            ss << "    break;\\n";
         } else {
             throw std::runtime_error("Sigi C++ code generator does not yet support this operation");
         }
