@@ -74,6 +74,8 @@ std::string emitSigi(const Program &p) {
             ss << "    }\n";
         } else if (op.kind == SOp::Break) {
             ss << "    break;\n";
+        } else if (op.kind == SOp::Continue) {
+            ss << "    continue;\n";
         } else {
             throw std::runtime_error("Sigi C++ code generator does not yet support this operation");
         }
