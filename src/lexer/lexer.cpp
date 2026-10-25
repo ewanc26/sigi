@@ -115,6 +115,7 @@ std::vector<Token> Lexer::tokenize(){
         if(c=='E'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"E",0,0,{},{},sl,sc}); continue;}
         if(c=='M'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"M",0,0,{},{},sl,sc}); continue;}
         if(c=='N'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"N",0,0,{},{},sl,sc}); continue;}
+        if(c=='w'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"CONTINUE",0,0,{},{},sl,sc}); continue;}
         const int unsupported_line = line, unsupported_column = col;
         const char unsupported = advance();
         throw std::runtime_error("Unsupported character '" + std::string(1, unsupported) +
