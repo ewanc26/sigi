@@ -1,19 +1,27 @@
-# Contributing to sigi
-
-
+# Contributing to Sigi
 
 ## Project context
 
-- Primary language: Rust
-- Default branch: main
+- Implementation language: C++20
+- Compiler output: generated C source; `--run` invokes a host C compiler
+- Default branch: `main`
 
-## Before submitting changes
+## Development setup
 
-- Read the README, manifests, and CI workflows before choosing commands.
-- Run the documented formatter, linter, build, and test checks relevant to your change.
-- Keep commits focused and explain compatibility or operational impact.
-- Open changes through a pull request with verification results.
+A C++20 compiler, CMake, Python 3, and a host C compiler are needed. Catch2 is fetched by CMake during configuration.
 
-## Recent direction
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j2
+ctest --test-dir build --output-on-failure
+```
 
-Recent commits: Sync AGENTS.md from zincfox; Sync AGENTS.md from zincfox; Sync AGENTS.md from zincfox; Sync CONTRIBUTING.md from zincfox; Sync CONTRIBUTING.md from zincfox
+## Working rules
+
+- Read the README, CMake build definition, CI workflow, and compiler-status document before changing the implementation.
+- Preserve the lexer → parser → semantic analysis → C code generation pipeline.
+- Unsupported language constructs must be rejected clearly; never silently drop source tokens or AST operations.
+- Add or update an end-to-end test when changing syntax or generated-code behaviour.
+- Keep the README, compiler-status document, and capability matrix aligned with verified C++ behaviour.
+- Keep changes focused and use a feature branch and pull request.
+- Do not commit generated build directories or compiler outputs.

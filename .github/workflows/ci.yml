@@ -4,9 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,5 +21,5 @@ jobs:
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j
-      - name: Unit tests
-        run: ./build/unit_tests
+      - name: Unit and CLI smoke tests
+        run: ctest --test-dir build --output-on-failure

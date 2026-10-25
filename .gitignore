@@ -1,14 +1,22 @@
-# Cargo/Rust
-/target
-Cargo.lock
-
-# Editor/OS
-.DS_Store
-.vscode
-.idea
-
-# Build artifacts
+# CMake and native build outputs
+/build/
+/build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/CMakeUserPresets.json
+/Testing/
 *.o
+*.a
+*.so
+*.dylib
+*.exe
 *.out
 sigic
+unit_tests
+runtime_tests
 *.egg-info/
+
+# Editor and operating-system files
+.DS_Store
+.vscode/
+.idea/

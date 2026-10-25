@@ -1,6 +1,7 @@
 #include "codegen.h"
 #include <sstream>
 #include <fstream>
+#include <stdexcept>
 
 std::string emitSigi(const Program &p) {
     std::stringstream ss;
@@ -27,7 +28,7 @@ std::string emitSigi(const Program &p) {
         } else if (op.kind == SOp::LoadVar) {
             ss << "    stack[sp++] = vars[" << op.varIndex << "];\n";
         } else if (op.kind == SOp::Store) {
-            ss << "    { double val = stack[--sp]; int idx = (int)stack[--sp]; vars[idx] = val; }\n";
+            ss << "    { int idx = (int)stack[--sp]; double val = stack[--sp]; if (idx < 0 || idx >= 100) { fprintf(stderr, \"Sigi runtime error: variable index out of range\\n\"); return 1; } vars[idx] = val; }\n";
         } else if (op.kind == SOp::Dup) {
             ss << "    stack[sp] = stack[sp-1]; sp++;\n";
         } else if (op.kind == SOp::Swap) {
@@ -58,6 +59,8 @@ std::string emitSigi(const Program &p) {
             ss << "    printf(\"%c\", (char)stack[--sp]); fflush(stdout);\n";
         } else if (op.kind == SOp::Input) {
             ss << "    { double x; scanf(\"%lf\", &x); stack[sp++] = x; }\n";
+        } else {
+            throw std::runtime_error("Sigi C++ code generator does not yet support this operation");
         }
     }
     ss << "    return 0;\n}\n";

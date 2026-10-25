@@ -1,6 +1,6 @@
 # Sigi
 
-A pure symbolic stack language that compiles to C via a C++ compiler.
+A pure symbolic stack language with a C++20 compiler frontend that emits C source. In `--run` mode, `sigic` invokes a host C compiler to build and run that generated source.
 
 **Character set:** `!@#$%^&*()-+=[]{}|;:'",.<>/?\~` plus digits `0-9`
 
@@ -20,20 +20,21 @@ The binary is `build/sigic`.
 ## Usage
 
 ```sh
-# Compile to C, written to stdout
-sigic hello.si
-
-# Compile to a C file
+# Generate C source (the output path is required)
 sigic hello.si -o hello.c
 
-# Compile and run (uses gcc; override with --cc)
+# Generate C and compile/run it (uses gcc by default)
 sigic hello.si --run
 sigic hello.si --run --cc clang
 ```
 
-The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not implemented in the Rust compiler yet and currently print a message and exit.
+The current C++ compiler is an early implementation and does not yet cover the full symbol reference below. Its end-to-end path supports numeric, string and character literals, basic stack manipulation, arithmetic, comparisons, logical NOT (`~`), numeric/character I/O, and numbered variable access/storage. Loop and function control flow, named variables, math built-ins, and the advanced memory, FFI, and aggregate facilities are not yet implemented end-to-end. Unsupported operations now report a compiler error instead of being silently omitted. See [the audited compiler status](docs/compiler-status.md) for the current boundary and architecture.
+
+The interactive REPL and `--interpret` mode are not implemented. `sigic` requires a source-file path and either `-o <file>` or `--run`.
 
 ## Symbol reference
+
+The table below records the intended language surface, not a claim that every entry is available in the current C++ compiler. Consult [the compiler status](docs/compiler-status.md) before relying on a feature that is not covered by the current end-to-end tests.
 
 | Symbol | Name | Effect |
 |--------|------|--------|
@@ -127,10 +128,11 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 
 ## Error handling
 
-- Checks for undefined function calls and redefinitions before compiling
-- A name must be declared before code refers to it, as in C. A reference before the declaration is an error that names both places
-- All errors (Lex, Parse, Semantic, Runtime) include line, column, source snippet, and pointer
-- Reference interpreter provides a second implementation for verification
+- Unknown source characters and unsupported parser tokens produce a diagnostic with line and column.
+- The C code generator rejects operations it cannot lower rather than silently dropping them.
+- Semantic analysis is not implemented yet; undefined names, invalid control flow, stack underflow/overflow and other semantic/runtime errors are not comprehensively checked.
+- The full language design below is not equivalent to the currently implemented compiler surface. See [the compiler status](docs/compiler-status.md).
+
 
 ## Examples
 

@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Volumes/Storage/Mac/projects/Developer/Git/sigi/build/cmake_install.cmake",
-		"/Volumes/Storage/Mac/projects/Developer/Git/sigi/build/_deps/catch2-build/cmake_install.cmake",
-		"/Volumes/Storage/Mac/projects/Developer/Git/sigi/build/_deps/catch2-build/src/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

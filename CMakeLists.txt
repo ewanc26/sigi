@@ -19,6 +19,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(catch2)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 enable_testing()
 
 add_executable(sigic
@@ -34,6 +36,7 @@ add_executable(unit_tests
     tests/unit/test_lexer.cpp
     tests/unit/test_parser.cpp
     tests/unit/test_sema.cpp
+    tests/unit/test_codegen.cpp
     src/lexer/lexer.cpp
     src/parser/parser.cpp
     src/sema/sema.cpp
@@ -42,3 +45,6 @@ add_executable(unit_tests
 target_include_directories(unit_tests PRIVATE src)
 target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
 add_test(NAME unit_tests COMMAND unit_tests)
+add_test(NAME cli_smoke
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/smoke.py
+            $<TARGET_FILE:sigic> ${CMAKE_C_COMPILER})

@@ -1,5 +1,7 @@
 #include "lexer.h"
 #include <cctype>
+#include <stdexcept>
+#include <string>
 
 Lexer::Lexer(const std::string &s): source(s){}
 char Lexer::peek(int o) const { if (i+o>=source.size()) return 0; return source[i+o]; }
@@ -111,7 +113,11 @@ std::vector<Token> Lexer::tokenize(){
         if(c=='E'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"E",0,0,{},{},sl,sc}); continue;}
         if(c=='M'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"M",0,0,{},{},sl,sc}); continue;}
         if(c=='N'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"N",0,0,{},{},sl,sc}); continue;}
-        advance();
+        const int unsupported_line = line, unsupported_column = col;
+        const char unsupported = advance();
+        throw std::runtime_error("Unsupported character '" + std::string(1, unsupported) +
+                                 "' at line " + std::to_string(unsupported_line) +
+                                 ", column " + std::to_string(unsupported_column));
     }
     return tokens;
 }
