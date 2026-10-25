@@ -53,7 +53,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "every value is an untyped double; no fixed-width integer types or wrapping"
         }
       }
     },
@@ -76,8 +76,8 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "partial",
+          "note": "double is the only floating type; float and long double are not modeled"
         }
       }
     },
@@ -127,7 +127,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no type declarations; typedef needs a type system"
         }
       }
     },
@@ -151,7 +151,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no addresses or pointer types; function indices (o, p) are the only pointer-like values"
         }
       }
     },
@@ -175,7 +175,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no aggregate types with named members"
         }
       }
     },
@@ -199,7 +199,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no aggregate types; depends on the structs model"
         }
       }
     },
@@ -223,7 +223,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no sizeof; values have no C type to measure"
         }
       }
     },
@@ -247,7 +247,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "only the array fill op exists; no brace initializer lists"
         }
       }
     },
@@ -271,7 +271,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "arrays are flat and one-dimensional with runtime IDs"
         }
       }
     },
@@ -295,7 +295,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "no const, volatile, or static storage qualifiers"
         }
       }
     },
@@ -397,7 +397,7 @@
         },
         "sigi": {
           "status": "missing",
-          "note": "not started"
+          "note": "values are untyped doubles, so there is no conversion to express"
         }
       }
     },
