@@ -8,7 +8,7 @@ use crate::ast::{
     walk_ops, AggregateDef, Field, ForeignFn, Function, Init, NumType, ObjectDecl, Op, Program,
     SourceLocation, SwitchArm, TargetName, TypeRef, VarName,
 };
-use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
+use crate::lexer::{LexError, Lexer, Token, TokenKind, TokenValue};
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
@@ -18,6 +18,9 @@ const MAX_FOREIGN_ARITY: usize = 4;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
+    /// A lexical error met while reading the next token, reported as is.
+    #[error(transparent)]
+    Lex(#[from] LexError),
     #[error("Expected token {0:?} at {1:?}")]
     ExpectedToken(TokenKind, SourceLocation),
     #[error("Unexpected token {0:?} at {1:?}")]
@@ -58,6 +61,10 @@ pub enum ParseError {
     DuplicateTypedef(String, SourceLocation),
     #[error("{0} is already defined at {1:?}")]
     DuplicateDefinition(String, SourceLocation),
+    #[error(
+        "{0} is used at {1} before its declaration at {2}; as in C, declare an object before any code refers to it"
+    )]
+    UseBeforeDeclaration(String, SourceLocation, SourceLocation),
     #[error("Struct {0} has no members at {1:?}")]
     EmptyAggregate(String, SourceLocation),
     #[error("Member {0} is declared twice at {1:?}")]
@@ -89,7 +96,8 @@ pub struct Parser<'a> {
     loop_depth: usize,
     switch_depth: usize,
     enum_consts: HashMap<String, i64>,
-    named_refs: HashSet<String>,
+    /// Names referenced as variables so far, with where each was first used.
+    named_refs: HashMap<String, SourceLocation>,
     fn_names: HashSet<String>,
     typedefs: HashMap<String, NumType>,
     aggregates: Vec<AggregateDef>,
@@ -106,7 +114,7 @@ impl<'a> Parser<'a> {
             loop_depth: 0,
             switch_depth: 0,
             enum_consts: HashMap::new(),
-            named_refs: HashSet::new(),
+            named_refs: HashMap::new(),
             fn_names: HashSet::new(),
             typedefs: HashMap::new(),
             aggregates: Vec::new(),
@@ -119,11 +127,7 @@ impl<'a> Parser<'a> {
     fn peek(&mut self) -> Result<&Token, ParseError> {
         match self.lexer.peek() {
             Some(Ok(t)) => Ok(t),
-            // Future: propagate the actual lex error instead of masking it
-            Some(Err(_)) => Err(ParseError::UnexpectedToken(
-                TokenKind::EOF,
-                SourceLocation { line: 0, col: 0 },
-            )),
+            Some(Err(err)) => Err(ParseError::Lex(err.clone())),
             None => Err(ParseError::UnexpectedToken(
                 TokenKind::EOF,
                 SourceLocation { line: 0, col: 0 },
@@ -134,7 +138,8 @@ impl<'a> Parser<'a> {
     fn advance(&mut self) -> Result<Token, ParseError> {
         match self.lexer.next() {
             Some(Ok(t)) => Ok(t),
-            _ => Err(ParseError::UnexpectedToken(
+            Some(Err(err)) => Err(ParseError::Lex(err)),
+            None => Err(ParseError::UnexpectedToken(
                 TokenKind::EOF,
                 SourceLocation { line: 0, col: 0 },
             )),
@@ -268,7 +273,7 @@ impl<'a> Parser<'a> {
                     if self.enum_consts.contains_key(&name) {
                         return Err(ParseError::DuplicateEnumConstant(name, tok.loc));
                     }
-                    if self.named_refs.contains(&name) || self.fn_names.contains(&name) {
+                    if self.named_refs.contains_key(&name) || self.fn_names.contains(&name) {
                         return Err(ParseError::NameConflict(name, tok.loc));
                     }
                     let mut value = next;
@@ -406,11 +411,17 @@ impl<'a> Parser<'a> {
         };
         let name_tok = self.advance()?;
         let name = ident_name(name_tok.clone())?;
-        if self.objects.contains_key(&name)
-            || self.enum_consts.contains_key(&name)
-            || self.named_refs.contains(&name)
-        {
+        if self.objects.contains_key(&name) || self.enum_consts.contains_key(&name) {
             return Err(ParseError::DuplicateDefinition(name, name_tok.loc));
+        }
+        // A reference before the declaration would have made the name an
+        // implicit variable. C rejects that too, so say so.
+        if let Some(used_at) = self.named_refs.get(&name) {
+            return Err(ParseError::UseBeforeDeclaration(
+                name,
+                *used_at,
+                name_tok.loc,
+            ));
         }
         let init = if self.peek()?.kind == TokenKind::EQ {
             let eq = self.advance()?;
@@ -720,7 +731,7 @@ impl<'a> Parser<'a> {
                 if let Some(value) = self.enum_consts.get(&name) {
                     return Ok(Op::Push(*value as f64));
                 }
-                self.named_refs.insert(name.clone());
+                self.named_refs.entry(name.clone()).or_insert(tok.loc);
                 Ok(Op::Var(VarName::Named(name)))
             }
             TokenKind::StoreIdent => {
@@ -734,7 +745,7 @@ impl<'a> Parser<'a> {
                 if self.objects.get(&name) == Some(&false) {
                     return Err(ParseError::NotAssignable(name, tok.loc));
                 }
-                self.named_refs.insert(name.clone());
+                self.named_refs.entry(name.clone()).or_insert(tok.loc);
                 Ok(Op::StoreNamed(name))
             }
             TokenKind::CALL => {
@@ -766,7 +777,7 @@ impl<'a> Parser<'a> {
                         if self.enum_consts.contains_key(&name) {
                             return Err(ParseError::NameConflict(name, target.loc));
                         }
-                        self.named_refs.insert(name.clone());
+                        self.named_refs.entry(name.clone()).or_insert(target.loc);
                         Ok(Op::AddrOf(VarName::Named(name)))
                     }
                     _ => Err(ParseError::ExpectedToken(TokenKind::IDENT, target.loc)),

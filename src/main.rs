@@ -64,7 +64,13 @@ fn main() {
 
     let lexer = Lexer::new(&source);
     let mut parser = SigiParser::new(lexer);
-    let program = parser.parse_program().expect("Failed to parse");
+    let program = match parser.parse_program() {
+        Ok(program) => program,
+        Err(err) => {
+            eprintln!("sigic: {err}");
+            std::process::exit(1);
+        }
+    };
 
     if cli.interpret {
         println!("Interpreter not implemented in Rust yet. Using Python version...");

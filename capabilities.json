@@ -628,7 +628,8 @@
         "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/literals_numeric.si"
+            "tests/differential/literals_numeric.si",
+            "tests/diagnostics.rs"
           ]
         }
       }
@@ -655,7 +656,8 @@
         "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/literals_escapes.si"
+            "tests/differential/literals_escapes.si",
+            "tests/diagnostics.rs"
           ]
         }
       }
@@ -880,7 +882,9 @@
           "status": "implemented",
           "tests": [
             "tests/differential/arrays.si",
-            "tests/differential/array_bounds.si"
+            "tests/differential/array_bounds.si",
+            "tests/diagnostics.rs",
+            "tests/differential/vars_declare_before_use.si"
           ]
         }
       }

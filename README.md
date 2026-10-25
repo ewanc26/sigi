@@ -38,7 +38,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 
 | Symbol | Name | Effect |
 |--------|------|--------|
-| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions; `u`/`l`/`ll`/`ul`/`ull` suffixes push a typed integer (untyped numbers are `f64`) |
+| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions; `u`/`l`/`ll`/`ul`/`ull` suffixes push a typed integer (untyped numbers are `f64`). Prefixes and suffixes are lowercase only, because uppercase letters are operators: `!2L` is push 2 then LOG. Write INTDIV as a spaced `l` after a literal, e.g. `!7 !2 l` |
 | `@` | DUP | Duplicate top of stack |
 | `#` | SWAP | Swap top two elements |
 | `$` | DROP | Discard top of stack |
@@ -64,7 +64,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `{.name body }` | FUNCN | Define named function |
 | `(N)` | CALL | Call function N |
 | `(.name)` | CALLN | Call named function |
-| `"text"` | STRING | Print characters; C escapes (`\n`, `\t`, `\xHH`, `\ooo`, `\uXXXX`, `\UXXXXXXXX`) decode to bytes |
+| `"text"` | STRING | Print characters; C escapes (`\n`, `\t`, `\xHH`, `\ooo`, `\uXXXX`, `\UXXXXXXXX`) decode to bytes. Any other escape, such as `\e`, is an error |
 | `'x` | CHAR | Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
 | `\\` | COMMENT | Line comment |
 | `/* body */` | BLOCK COMMENT | Multi-line comment |
@@ -129,6 +129,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 ## Error handling
 
 - Checks for undefined function calls and redefinitions before compiling
+- A name must be declared before code refers to it, as in C. A reference before the declaration is an error that names both places
 - All errors (Lex, Parse, Semantic, Runtime) include line, column, source snippet, and pointer
 - Reference interpreter provides a second implementation for verification
 

@@ -412,19 +412,17 @@ impl<'a> Lexer<'a> {
             false
         };
 
-        // Hexadecimal (0x) and binary (0b) integer constants.
+        // Hexadecimal (0x) and binary (0b) integer constants. The prefixes are
+        // lowercase only: uppercase letters are operators (X exits, B is
+        // bitwise AND), and a literal must not change what they mean.
         if self.peek() == Some('0') {
-            if let Some(radix_ch) = self
-                .peek_nth(1)
-                .filter(|c| matches!(*c, 'x' | 'X' | 'b' | 'B'))
-            {
+            if let Some(radix) = self.peek_nth(1).and_then(|c| match c {
+                'x' => Some(16),
+                'b' => Some(2),
+                _ => None,
+            }) {
                 self.advance();
                 self.advance();
-                let radix = if radix_ch == 'x' || radix_ch == 'X' {
-                    16
-                } else {
-                    2
-                };
                 let mut digits = String::new();
                 while let Some(c) = self.peek() {
                     if c.is_digit(radix) {
@@ -487,22 +485,21 @@ impl<'a> Lexer<'a> {
         negative: bool,
         loc: SourceLocation,
     ) -> Result<Token, LexError> {
+        // Suffixes are lowercase only, for the same reason as the prefixes:
+        // `U` is USLEEP and `L` is LOG, so `!5U` must not swallow them.
         let mut suffix = String::new();
         while let Some(c) = self.peek() {
-            if matches!(c, 'u' | 'U' | 'l' | 'L') {
+            if matches!(c, 'u' | 'l') {
                 suffix.push(self.advance().unwrap());
             } else {
                 break;
             }
         }
-        const SUFFIXES: [&str; 22] = [
-            "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ul", "UL", "lu", "lU", "Lu", "LU", "ull",
-            "uLL", "Ull", "ULL", "llu", "llU", "LLu", "LLU",
-        ];
+        const SUFFIXES: [&str; 7] = ["u", "l", "ll", "ul", "lu", "ull", "llu"];
         if !suffix.is_empty() && !SUFFIXES.contains(&suffix.as_str()) {
             return Err(LexError::InvalidSuffix(loc));
         }
-        if negative && suffix.contains(['u', 'U']) {
+        if negative && suffix.contains('u') {
             // `-n` with an unsigned suffix wraps in C; sigi does not model that.
             return Err(LexError::InvalidSuffix(loc));
         }
@@ -518,9 +515,9 @@ impl<'a> Lexer<'a> {
                 loc,
             });
         }
-        let unsigned = suffix.contains(['u', 'U']);
+        let unsigned = suffix.contains('u');
         let ty = if unsigned {
-            if magnitude <= u32::MAX as u64 && !suffix.contains(['l', 'L']) {
+            if magnitude <= u32::MAX as u64 && !suffix.contains('l') {
                 NumType::U32
             } else {
                 NumType::U64
