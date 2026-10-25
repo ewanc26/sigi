@@ -1,0 +1,13 @@
+\\ Pointers to variable cells: j takes an address, y loads, : stores.
+!5 :.x
+.x |
+j.x y |
+!7 j.x :
+.x |
+j.x j.x = |
+j.x :.p
+!9 .p :
+.x |
+!4 !0 :
+j0 y |
+j0 j.x = |

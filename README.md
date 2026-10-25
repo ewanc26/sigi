@@ -54,7 +54,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `\|` | PRINT | Pop and print as number |
 | `^` | PRINTC | Pop and print as character |
 | `?` | INPUT | Read number from stdin |
-| `:` | STORE | Pop address, pop value → store to var |
+| `:` | STORE | Pop address, pop value. A pointer stores the value through it; a number names a variable slot |
 | `:.name` | STOREN | Pop value → store to named variable |
 | `.name` | LOADN | Push value of named variable or call function |
 | `<n>` | LOAD | Push value of variable n (digits 0-99) |
@@ -112,6 +112,8 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `o.name` / `o<n>` | FUNC_REF | Push the index of a function |
 | `p` | CALL_PTR | Pop a function index and call that function |
 | `i.T` | CAST | Pop a, push it converted to type T (`f32`, `f64`, `ld`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`); integer casts wrap, out-of-range float casts exit 1. `ld` is C `long double`, whose width is the target's |
+| `j.name` / `j<n>` | ADDRESS | Push a pointer to a named or numbered variable cell |
+| `y` | DEREF | Pop a pointer, push the value it points to |
 | `z` | SIZEOF | Pop a, push its size in bytes (`u64`) |
 | `z.T` | SIZEOF_TYPE | Push the size in bytes of type T |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |

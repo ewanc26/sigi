@@ -157,8 +157,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no addresses or pointer types; function indices (o, p) are the only pointer-like values"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_pointers.si"
+          ]
         }
       }
     },

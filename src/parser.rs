@@ -501,6 +501,22 @@ impl<'a> Parser<'a> {
                 }
             }
             TokenKind::CALLPTR => Ok(Op::CallPtr),
+            TokenKind::ADDRESS => {
+                let target = self.advance()?;
+                match target.value {
+                    Some(TokenValue::Var(n)) if target.kind == TokenKind::VAR => {
+                        Ok(Op::AddrOf(VarName::Index(n)))
+                    }
+                    Some(TokenValue::Ident(name)) if target.kind == TokenKind::IDENT => {
+                        if self.enum_consts.contains_key(&name) {
+                            return Err(ParseError::NameConflict(name, target.loc));
+                        }
+                        self.named_refs.insert(name.clone());
+                        Ok(Op::AddrOf(VarName::Named(name)))
+                    }
+                    _ => Err(ParseError::ExpectedToken(TokenKind::IDENT, target.loc)),
+                }
+            }
             TokenKind::LABEL | TokenKind::GOTO => {
                 let name_tok = self.advance()?;
                 let name = match name_tok.value {

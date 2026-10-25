@@ -130,7 +130,9 @@ impl Codegen {
     fn collect_vars(&self, ops: &[Op], named_vars: &mut HashSet<String>) {
         for op in ops {
             match op {
-                Op::Var(VarName::Named(name)) | Op::StoreNamed(name) => {
+                Op::Var(VarName::Named(name))
+                | Op::AddrOf(VarName::Named(name))
+                | Op::StoreNamed(name) => {
                     named_vars.insert(name.clone());
                 }
                 Op::While(body) | Op::DoWhile(body) | Op::Block(body) | Op::For(body) => {
@@ -190,6 +192,14 @@ impl Codegen {
                 VarName::Index(i) => lines.push(format!("{}pushv(vars[{}]);", prefix, i)),
                 VarName::Named(n) => lines.push(format!(
                     "{}pushv(var_{});",
+                    prefix,
+                    self.c_ident(&TargetName::Named(n.clone()))
+                )),
+            },
+            Op::AddrOf(name) => match name {
+                VarName::Index(i) => lines.push(format!("{prefix}pushv(sg_ptr_to(&vars[{i}]));")),
+                VarName::Named(n) => lines.push(format!(
+                    "{}pushv(sg_ptr_to(&var_{}));",
                     prefix,
                     self.c_ident(&TargetName::Named(n.clone()))
                 )),
@@ -375,7 +385,9 @@ impl Codegen {
                     "PRINT" => lines.push(format!("{prefix}sg_print(popv());")),
                     "PRINTC" => lines.push(format!("{prefix}putchar((int)sg_as_ll(popv()));")),
                     "INPUT" => lines.push(format!("{}{{ double x; scanf(\"%lf\", &x); push(x); }}", prefix)),
-                    "STORE" => lines.push(format!("{prefix}{{ int idx = (int)pop(); vars[idx] = popv(); }}")),
+                    // `:` pops the address: a pointer stores through it, a number names a variable slot.
+                    "STORE" => lines.push(format!("{prefix}{{ sv addr = popv(); if (addr.t == SG_PTR) {{ sv val = popv(); sg_store_ptr(addr, val); }} else {{ int idx = (int)sg_as_ll(addr); vars[idx] = popv(); }} }}")),
+                    "DEREF" => lines.push(format!("{prefix}pushv(sg_deref(popv()));")),
                     "NOP" => {},
                     _ => {},
                 }

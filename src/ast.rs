@@ -103,6 +103,8 @@ pub enum Op {
     SizeOfType(NumType),
     /// Push the value of a variable (indexed or named).
     Var(VarName),
+    /// Push a pointer to a variable cell, written `j.name` or `j<n>`.
+    AddrOf(VarName),
     /// Call a function by index or name.
     Call(TargetName),
     /// Pop and store to a named variable.

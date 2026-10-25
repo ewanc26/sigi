@@ -27,13 +27,13 @@
  * conversions follow C.
  */
 
-typedef enum { SG_F64, SG_F32, SG_LD, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U32, SG_I64, SG_U64 } sg_ty;
+typedef enum { SG_F64, SG_F32, SG_LD, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U32, SG_I64, SG_U64, SG_PTR } sg_ty;
 typedef enum { SG_OP_ADD, SG_OP_SUB, SG_OP_MUL, SG_OP_DIV, SG_OP_MOD } sg_op;
 typedef enum { SG_REL_EQ, SG_REL_LT, SG_REL_GT } sg_relop;
 
 typedef struct {
     sg_ty t;
-    union { double d; long double ld; long long s; unsigned long long u; } v;
+    union { double d; long double ld; long long s; unsigned long long u; void *p; } v;
 } sv;
 
 static void sg_fail(const char *msg) { fprintf(stderr, "%s\n", msg); exit(1); }
@@ -90,6 +90,7 @@ static long double sg_fval(sv x) { return x.t == SG_LD ? x.v.ld : (long double)x
  * float outside the target range is an error (C leaves it undefined). */
 static sv sg_cast(sv x, sg_ty to) {
     sv r;
+    if (x.t == SG_PTR || to == SG_PTR) sg_fail("Invalid conversion of a pointer");
     r.t = to;
     if (to == SG_F64) {
         r.v.d = sg_is_float(x.t) ? (double)sg_fval(x) : sg_is_signed(x.t) ? (double)x.v.s : (double)x.v.u;
@@ -124,10 +125,13 @@ static sv sg_cast(sv x, sg_ty to) {
 static double sg_to_double(sv x) { return sg_cast(x, SG_F64).v.d; }
 
 static long long sg_as_ll(sv x) {
+    if (x.t == SG_PTR) sg_fail("Pointer used as an integer");
     return sg_is_float(x.t) ? (long long)sg_fval(x) : (long long)sg_bits_of(x);
 }
 
-static int sg_truthy(sv x) { return sg_is_float(x.t) ? sg_fval(x) != 0.0L : sg_bits_of(x) != 0; }
+static int sg_truthy(sv x) {
+    if (x.t == SG_PTR) return x.v.p != NULL;
+    return sg_is_float(x.t) ? sg_fval(x) != 0.0L : sg_bits_of(x) != 0; }
 
 static sg_ty sg_promote(sg_ty t) {
     return (t == SG_I8 || t == SG_U8 || t == SG_I16 || t == SG_U16) ? SG_I32 : t;
@@ -149,6 +153,7 @@ static sg_ty sg_common(sg_ty a, sg_ty b) {
 /* Arithmetic in the common type.  Integer overflow wraps (C leaves it
  * undefined); integer division by zero is an error. */
 static sv sg_arith(sg_op op, sv a, sv b) {
+    if (a.t == SG_PTR || b.t == SG_PTR) sg_fail("Invalid arithmetic on a pointer");
     sg_ty t = sg_common(a.t, b.t);
     sv x = sg_cast(a, t), y = sg_cast(b, t), r;
     r.t = t;
@@ -205,6 +210,15 @@ static sv sg_arith(sg_op op, sv a, sv b) {
 
 /* Relational test in the common type.  Unordered floats (NaN) compare false. */
 static int sg_rel(sg_relop op, sv a, sv b) {
+    if (a.t == SG_PTR || b.t == SG_PTR) {
+        if (a.t != b.t) sg_fail("Comparison of a pointer with a number");
+        uintptr_t p = (uintptr_t)a.v.p, q = (uintptr_t)b.v.p;
+        switch (op) {
+        case SG_REL_EQ: return p == q;
+        case SG_REL_LT: return p < q;
+        default: return p > q;
+        }
+    }
     sg_ty t = sg_common(a.t, b.t);
     sv x = sg_cast(a, t), y = sg_cast(b, t);
     int cmp;
@@ -227,7 +241,8 @@ static int sg_rel(sg_relop op, sv a, sv b) {
 }
 
 static void sg_print(sv x) {
-    if (x.t == SG_LD) printf("%Lg\n", x.v.ld);
+    if (x.t == SG_PTR) printf("%p\n", x.v.p);
+    else if (x.t == SG_LD) printf("%Lg\n", x.v.ld);
     else if (sg_is_float(x.t)) printf("%g\n", x.v.d);
     else if (sg_is_signed(x.t)) printf("%lld\n", x.v.s);
     else printf("%llu\n", x.v.u);
@@ -288,4 +303,26 @@ static sv popv(void) {
 /* Pop as a double, for operations that work on doubles. */
 static double pop(void) {
     return sg_to_double(popv());
+}
+
+/* ── Pointers ──────────────────────────────────────────────────────
+ * A pointer is an SG_PTR value holding the address of a variable cell
+ * (an sv).  `j` takes an address, `y` loads through one, and `:` stores
+ * through one. */
+
+static sv sg_ptr_to(sv *cell) {
+    sv r;
+    r.t = SG_PTR;
+    r.v.p = cell;
+    return r;
+}
+
+static sv sg_deref(sv p) {
+    if (p.t != SG_PTR) sg_fail("Dereference of a non-pointer");
+    return *(sv *)p.v.p;
+}
+
+static void sg_store_ptr(sv p, sv val) {
+    if (p.t != SG_PTR) sg_fail("Store through a non-pointer");
+    *(sv *)p.v.p = val;
 }
