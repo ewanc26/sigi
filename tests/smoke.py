@@ -75,6 +75,42 @@ def main() -> int:
         if "division by zero" not in failure.stderr:
             raise AssertionError(f"division by zero was not diagnosed: {failure.stderr!r}")
 
+        true_branch = temp / "if true.si"
+        true_branch.write_text('!1 { "then" ; "else" }', encoding="utf-8")
+        result = run([compiler, str(true_branch), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout != "then":
+            raise AssertionError(f"true if branch failed: {result.stdout!r}")
+
+        false_branch = temp / "if false.si"
+        false_branch.write_text('!0 { "then" ; "else" }', encoding="utf-8")
+        result = run([compiler, str(false_branch), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout != "else":
+            raise AssertionError(f"false if branch failed: {result.stdout!r}")
+
+        loop = temp / "while loop.si"
+        loop.write_text("!1 [ $ !0 ]", encoding="utf-8")
+        result = run([compiler, str(loop), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout:
+            raise AssertionError(f"while loop unexpectedly printed output: {result.stdout!r}")
+
+        break_loop = temp / "break loop.si"
+        break_loop.write_text('!1 [ "once" <> !0 ]', encoding="utf-8")
+        result = run([compiler, str(break_loop), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout != "once":
+            raise AssertionError(f"loop break failed: {result.stdout!r}")
+
+        invalid_control = temp / "break outside loop.si"
+        invalid_control.write_text("<>", encoding="utf-8")
+        failure = run([compiler, str(invalid_control), "-o", str(output_c)], expected_status=1)
+        if "break used outside a loop" not in failure.stderr:
+            raise AssertionError(f"invalid break was not diagnosed: {failure.stderr!r}")
+
+        malformed_if = temp / "malformed if.si"
+        malformed_if.write_text('{ "then" ; }', encoding="utf-8")
+        failure = run([compiler, str(malformed_if), "-o", str(output_c)], expected_status=1)
+        if "unmatched" not in failure.stderr and "separator" not in failure.stderr:
+            raise AssertionError(f"malformed conditional was not diagnosed: {failure.stderr!r}")
+
         missing = temp / "missing source.si"
         failure = run([compiler, str(missing), "-o", str(output_c)], expected_status=1)
         if "cannot read source file" not in failure.stderr:
