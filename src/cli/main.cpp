@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
         Lexer lexer(source);
         const auto tokens = lexer.tokenize();
         Parser parser(tokens);
-        const auto program = parser.parse();
+        auto program = parser.parse();
         SemanticAnalyzer sema;
         sema.analyze(program);
         const std::string ccode = emitSigi(program);
