@@ -161,7 +161,9 @@ static double sg_to_double(sv x) { return sg_cast(x, SG_F64).v.d; }
 
 static long long sg_as_ll(sv x) {
     if (x.t == SG_PTR) sg_fail("Pointer used as an integer");
-    return sg_is_float(x.t) ? (long long)sg_fval(x) : (long long)sg_bits_of(x);
+    /* A direct float-to-integer cast is undefined when the value is outside
+       the destination range. Route through the checked conversion helper. */
+    return sg_is_float(x.t) ? sg_cast(x, SG_I64).v.s : (long long)sg_bits_of(x);
 }
 
 static int sg_truthy(sv x) {
