@@ -99,6 +99,18 @@ def main() -> int:
         if result.stdout != "once":
             raise AssertionError(f"loop break failed: {result.stdout!r}")
 
+        continue_loop = temp / "continue loop.si"
+        continue_loop.write_text('!1 [ $ !0 w "bad" ]', encoding="utf-8")
+        result = run([compiler, str(continue_loop), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout:
+            raise AssertionError(f"continue did not skip the rest of the loop body: {result.stdout!r}")
+
+        invalid_continue = temp / "continue outside loop.si"
+        invalid_continue.write_text("w", encoding="utf-8")
+        failure = run([compiler, str(invalid_continue), "-o", str(output_c)], expected_status=1)
+        if "continue used outside a loop" not in failure.stderr:
+            raise AssertionError(f"invalid continue was not diagnosed: {failure.stderr!r}")
+
         invalid_control = temp / "break outside loop.si"
         invalid_control.write_text("<>", encoding="utf-8")
         failure = run([compiler, str(invalid_control), "-o", str(output_c)], expected_status=1)
