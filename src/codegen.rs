@@ -4,7 +4,7 @@
 //! fixed stack array and runtime prelude.  The generated code is
 //! portable C99 and links against libm.
 
-use crate::ast::{Op, Program, TargetName, VarName};
+use crate::ast::{walk_ops, Op, Program, TargetName, VarName};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct Codegen {
@@ -73,6 +73,33 @@ impl Codegen {
         }
         lines.push("".to_string());
 
+        // ─── Function Pointer Dispatch ───────────────────────────
+        // Function values are indices into `program.functions`; the
+        // dispatcher maps an index back to its function. Emitted only when
+        // the program calls through a pointer.
+        let mut uses_call_ptr = false;
+        walk_ops(&self.program.main_code, &mut |op| {
+            uses_call_ptr |= matches!(op, Op::CallPtr)
+        });
+        for fn_ in &self.program.functions {
+            walk_ops(&fn_.body, &mut |op| uses_call_ptr |= matches!(op, Op::CallPtr));
+        }
+        if uses_call_ptr {
+            lines.push("static void sigi_call_ptr(double _idx) {".to_string());
+            lines.push("    switch ((long long)_idx) {".to_string());
+            for (i, fn_) in self.program.functions.iter().enumerate() {
+                lines.push(format!(
+                    "        case {i}: func_{}(); return;",
+                    self.c_ident(&fn_.name)
+                ));
+            }
+            lines.push("    }".to_string());
+            lines.push("    fprintf(stderr, \"Invalid function pointer\\n\");".to_string());
+            lines.push("    exit(1);".to_string());
+            lines.push("}".to_string());
+            lines.push("".to_string());
+        }
+
         // ─── Function Definitions ────────────────────────────────
         for fn_ in &self.program.functions {
             lines.push(format!(
@@ -108,6 +135,11 @@ impl Codegen {
                 }
                 Op::While(body) | Op::DoWhile(body) | Op::Block(body) | Op::For(body) => {
                     self.collect_vars(body, named_vars)
+                }
+                Op::Switch(arms) => {
+                    for arm in arms {
+                        self.collect_vars(&arm.body, named_vars);
+                    }
                 }
                 Op::IfElse {
                     then_body,
@@ -203,6 +235,41 @@ impl Codegen {
             }
             Op::Break => lines.push(format!("{prefix}break;")),
             Op::Continue => lines.push(format!("{prefix}continue;")),
+            Op::Switch(arms) => {
+                // Arms keep source order and fall through, as in C.
+                lines.push(format!("{prefix}{{"));
+                lines.push(format!("{prefix}    long long _sw = (long long)pop();"));
+                lines.push(format!("{prefix}    switch (_sw) {{"));
+                for arm in arms {
+                    match arm.value {
+                        Some(v) => lines.push(format!("{prefix}    case {v}LL: ;")),
+                        None => lines.push(format!("{prefix}    default: ;")),
+                    }
+                    for op in &arm.body {
+                        lines.extend(self.codegen_op(op, indent + 2));
+                    }
+                }
+                lines.push(format!("{prefix}    }}"));
+                lines.push(format!("{prefix}}}"));
+            }
+            Op::Label(name) => lines.push(format!(
+                "{prefix}sigi_l_{}: ;",
+                self.c_ident(&TargetName::Named(name.clone()))
+            )),
+            Op::Goto(name) => lines.push(format!(
+                "{prefix}goto sigi_l_{};",
+                self.c_ident(&TargetName::Named(name.clone()))
+            )),
+            Op::FuncRef(target) => {
+                let index = self
+                    .program
+                    .functions
+                    .iter()
+                    .position(|f| f.name == *target)
+                    .expect("parser rejects references to undefined functions");
+                lines.push(format!("{prefix}push({index});"));
+            }
+            Op::CallPtr => lines.push(format!("{prefix}sigi_call_ptr(pop());")),
             Op::FfiCall(name) => {
                 let arity = self
                     .program

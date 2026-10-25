@@ -100,8 +100,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_enums.si"
+          ]
         }
       }
     },
@@ -444,8 +446,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/control_switch.si"
+          ]
         }
       }
     },
@@ -520,8 +524,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/control_goto.si"
+          ]
         }
       }
     },
@@ -544,8 +550,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/func_pointers.si"
+          ]
         }
       }
     },

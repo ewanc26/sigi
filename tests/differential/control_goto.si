@@ -1,0 +1,9 @@
+!0 :.i
+h.again
+.i !1 + :.i
+.i |
+.i !3 - { g.again ; }
+!1 { g.skip ; }
+!99 |
+h.skip
+!42 |

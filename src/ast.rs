@@ -41,6 +41,16 @@ pub enum Op {
     Break,
     /// Skip to the next iteration of the innermost loop.
     Continue,
+    /// Multi-way branch on the popped selector. Arms fall through like C.
+    Switch(Vec<SwitchArm>),
+    /// Jump target declared with `h.name`.
+    Label(String),
+    /// Jump to a label in the same function, written `g.name`.
+    Goto(String),
+    /// Push the index of a function, written `o.name` or `o<n>`.
+    FuncRef(TargetName),
+    /// Pop a function index and call the function it names.
+    CallPtr,
     /// Conditional: pop condition, execute one of two bodies.
     IfElse {
         then_body: Vec<Op>,
@@ -50,6 +60,38 @@ pub enum Op {
     FfiCall(String),
     /// A primitive operation identified by its token name (ADD, DUP, etc.).
     Simple(String),
+}
+
+/// One arm of a `Switch`: `Some(value)` for `k!n`, `None` for `m`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchArm {
+    pub value: Option<i64>,
+    pub body: Vec<Op>,
+}
+
+impl Op {
+    /// Nested op lists of compound ops, for walking the tree.
+    pub fn bodies(&self) -> Vec<&[Op]> {
+        match self {
+            Op::While(b) | Op::DoWhile(b) | Op::Block(b) | Op::For(b) => vec![b.as_slice()],
+            Op::IfElse {
+                then_body,
+                else_body,
+            } => vec![then_body.as_slice(), else_body.as_slice()],
+            Op::Switch(arms) => arms.iter().map(|a| a.body.as_slice()).collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// Visit every op in `ops`, including ops nested inside compound ops.
+pub fn walk_ops(ops: &[Op], f: &mut impl FnMut(&Op)) {
+    for op in ops {
+        f(op);
+        for body in op.bodies() {
+            walk_ops(body, f);
+        }
+    }
 }
 
 /// Reference to a variable slot.

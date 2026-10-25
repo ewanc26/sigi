@@ -1,0 +1,3 @@
+e{ .RED .GREEN .BLUE !5 .NEXT .LAST }
+.RED | .GREEN | .BLUE | .NEXT | .LAST |
+.LAST !7 = { !100 | ; !200 | }
