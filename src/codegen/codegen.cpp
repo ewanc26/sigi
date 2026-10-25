@@ -57,7 +57,7 @@ std::string emitSigi(const Program &p) {
         } else if (op.kind == SOp::Gt) {
             ss << "    { double b=sigi_pop(),a=sigi_pop(); sigi_push((a>b)?1.0:0.0); }\n";
         } else if (op.kind == SOp::Print) {
-            ss << "    printf(\"%g\n\", sigi_pop());\n";
+            ss << "    printf(\"%g\\n\", sigi_pop());\n";
         } else if (op.kind == SOp::PrintChar) {
             ss << "    printf(\"%c\", (char)sigi_pop()); fflush(stdout);\n";
         } else if (op.kind == SOp::Input) {
