@@ -11,6 +11,12 @@ pub struct SourceLocation {
     pub col: usize,
 }
 
+impl std::fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "line {}, column {}", self.line, self.col)
+    }
+}
+
 /// The numeric type of a typed value.
 ///
 /// Untyped numbers (`!5`, `!2.5`) are `F64`. Suffixed integer literals,

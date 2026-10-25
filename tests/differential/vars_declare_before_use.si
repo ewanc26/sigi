@@ -1,0 +1,14 @@
+\\ Objects are declared before any code refers to them, as in C. The function
+\\ is defined after the declaration, so it can index the array through j.name.
+r .f64 [ !3 ] .slots
+{.fill
+  !1.5 j.slots !0 + :
+  !2.5 j.slots !1 + :
+  !4.25 j.slots !2 + :
+}
+(.fill)
+!0 :.i
+!3 f{
+  j.slots .i + y |
+  .i !1 + :.i
+}

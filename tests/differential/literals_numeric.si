@@ -1,12 +1,12 @@
-\ Hexadecimal, binary, octal and suffixed integer constants.
+\ Hexadecimal, binary, octal and suffixed integer constants (lowercase prefixes and suffixes).
 !0xFF |
-!0X10 |
+!0x10 |
 !0b1011 |
-!0B11 |
+!0b11 |
 !017 |
 !0 |
 !-0x10 |
-!10UL |
+!10ul |
 !42ll |
 !007.5 |
 !7 !0x1F + |
