@@ -4,7 +4,7 @@
 TEST_CASE("code generator rejects operations without a lowering implementation") {
     Program program;
     SOp unsupported;
-    unsupported.kind = SOp::WhileStart;
+    unsupported.kind = SOp::Continue;
     program.mainOps.push_back(unsupported);
     REQUIRE_THROWS(emitSigi(program));
 }
