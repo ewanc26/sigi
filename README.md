@@ -38,7 +38,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 
 | Symbol | Name | Effect |
 |--------|------|--------|
-| `!N` | PUSH | Push number N (int or float) |
+| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions, optional `u`/`l`/`ll` suffix |
 | `@` | DUP | Duplicate top of stack |
 | `#` | SWAP | Swap top two elements |
 | `$` | DROP | Discard top of stack |
@@ -64,8 +64,8 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `{.name body }` | FUNCN | Define named function |
 | `(N)` | CALL | Call function N |
 | `(.name)` | CALLN | Call named function |
-| `"text"` | STRING | Print characters |
-| `'x` | CHAR | Push character code |
+| `"text"` | STRING | Print characters; C escapes (`\n`, `\t`, `\xHH`, `\ooo`, `\uXXXX`, `\UXXXXXXXX`) decode to bytes |
+| `'x` | CHAR | Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
 | `\\` | COMMENT | Line comment |
 | `/* body */` | BLOCK COMMENT | Multi-line comment |
 | `S` | SIN | Pop a → push sin(a) |
@@ -102,6 +102,15 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `f{ body }` | FOR | Pop count, run body that many times |
 | `x "header" .name !N` | FFI_DECL | Declare C function `name` with N double arguments from `<header>`; a `.c` path is compiled and linked from the source's directory |
 | `c .name` | FFI_CALL | Pop N arguments, call declared C function, push result |
+| `d[ body ]` | DO-WHILE | Run body, then repeat while stack top nonzero |
+| `q` | BREAK | Leave the innermost loop or switch |
+| `w` | CONTINUE | Continue the innermost loop |
+| `e{ .A .B .C !5 .D }` | ENUM | Declare integer constants; each takes the previous value + 1 unless followed by `!N` |
+| `h.name` | LABEL | Define a goto label in the current function |
+| `g.name` | GOTO | Jump to a label in the same function |
+| `s{ k!n body m body }` | SWITCH | Pop selector; `k!n` starts a case, `m` the default; arms fall through as in C |
+| `o.name` / `o<n>` | FUNC_REF | Push the index of a function |
+| `p` | CALL_PTR | Pop a function index and call that function |
 
 ## Error handling
 
