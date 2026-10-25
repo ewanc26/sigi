@@ -75,6 +75,9 @@ Program Parser::parse(){
             if (controls.empty() || controls.back().kind != SOp::IfStart) {
                 throw std::runtime_error("unmatched '}' in control flow");
             }
+            if (!controls.back().hasElse) {
+                throw std::runtime_error("if-else block is missing ';' separator");
+            }
             controls.pop_back();
         } else if (op.kind == SOp::Break) {
             bool insideLoop = false;
