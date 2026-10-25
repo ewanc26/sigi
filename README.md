@@ -38,7 +38,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 
 | Symbol | Name | Effect |
 |--------|------|--------|
-| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions, optional `u`/`l`/`ll` suffix |
+| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions; `u`/`l`/`ll`/`ul`/`ull` suffixes push a typed integer (untyped numbers are `f64`) |
 | `@` | DUP | Duplicate top of stack |
 | `#` | SWAP | Swap top two elements |
 | `$` | DROP | Discard top of stack |
@@ -111,6 +111,10 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `s{ k!n body m body }` | SWITCH | Pop selector; `k!n` starts a case, `m` the default; arms fall through as in C |
 | `o.name` / `o<n>` | FUNC_REF | Push the index of a function |
 | `p` | CALL_PTR | Pop a function index and call that function |
+| `i.T` | CAST | Pop a, push it converted to type T (`f32`, `f64`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`); integer casts wrap, out-of-range float casts exit 1 |
+| `z` | SIZEOF | Pop a, push its size in bytes (`u64`) |
+| `z.T` | SIZEOF_TYPE | Push the size in bytes of type T |
+| `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
 ## Error handling
 

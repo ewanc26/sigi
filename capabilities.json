@@ -52,8 +52,11 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "every value is an untyped double; no fixed-width integer types or wrapping"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/literals_typed.si",
+            "tests/differential/casts_sized.si"
+          ]
         }
       }
     },
@@ -77,7 +80,7 @@
         },
         "sigi": {
           "status": "partial",
-          "note": "double is the only floating type; float and long double are not modeled"
+          "note": "f64 (double) and f32 (float) with C conversion and arithmetic; long double is not modeled; arrays store doubles"
         }
       }
     },
@@ -126,8 +129,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no type declarations; typedef needs a type system"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_typedef.si"
+          ]
         }
       }
     },
@@ -222,8 +227,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no sizeof; values have no C type to measure"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/casts_sized.si"
+          ]
         }
       }
     },
@@ -396,8 +403,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "values are untyped doubles, so there is no conversion to express"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/casts_sized.si"
+          ]
         }
       }
     },
