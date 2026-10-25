@@ -7,7 +7,7 @@ std::string emitSigi(const Program &p) {
     std::stringstream ss;
     ss << "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n#include <string.h>\n#include <time.h>\n\n";
     ss << "double stack[10000]; int sp = 0;\n";
-    ss << "static void sigi_fail(const char *m) { fprintf(stderr, \"Sigi runtime error: %s\n\", m); exit(1); }\n";
+    ss << "static void sigi_fail(const char *m) { fprintf(stderr, \"Sigi runtime error: %s\\n\", m); exit(1); }\n";
     ss << "static void sigi_push(double v) { if (sp >= 10000) sigi_fail(\"stack overflow\"); stack[sp++] = v; }\n";
     ss << "static double sigi_pop(void) { if (sp <= 0) sigi_fail(\"stack underflow\"); return stack[--sp]; }\n";
     ss << "double vars[100] = {0};\n\n";
