@@ -33,6 +33,14 @@ pub enum LexError {
     InvalidOctal(SourceLocation),
     #[error("Invalid integer suffix at {0:?}")]
     InvalidSuffix(SourceLocation),
+    #[error("Unknown escape sequence '\\{0}' at {1:?}")]
+    UnknownEscape(char, SourceLocation),
+    #[error("Escape sequence value out of range at {0:?}")]
+    EscapeOutOfRange(SourceLocation),
+    #[error("Malformed escape sequence at {0:?}")]
+    InvalidEscape(SourceLocation),
+    #[error("Character constant must denote one byte at {0:?}")]
+    MultiByteChar(SourceLocation),
     #[error("Unexpected character {0:?} at {1:?}")]
     UnexpectedCharacter(char, SourceLocation),
 }
@@ -127,7 +135,7 @@ pub enum TokenValue {
     Var(usize),
     Ident(String),
     Char(u8),
-    String(String),
+    String(Vec<u8>),
 }
 
 // ─── Lexer ───────────────────────────────────────────────────────
@@ -256,55 +264,108 @@ impl<'a> Lexer<'a> {
 
     // ─── Token Readers ───────────────────────────────────────────
 
-    /// Read a double-quoted string, processing escape sequences.
+    /// Read a double-quoted string.  The result is bytes: source text is
+    /// UTF-8 and escapes produce the bytes C would store for them.
     fn read_string(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
-        let mut chars = String::new();
+        let mut bytes = Vec::new();
         while let Some(ch) = self.advance() {
             if ch == '"' {
                 return Ok(Token {
                     kind: TokenKind::STRING,
-                    value: Some(TokenValue::String(chars)),
+                    value: Some(TokenValue::String(bytes)),
                     loc,
                 });
             }
             if ch == '\\' {
-                let esc = self.advance().ok_or(LexError::UnterminatedString(loc))?;
-                chars.push(match esc {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '\\' => '\\',
-                    '"' => '"',
-                    _ => esc,
-                });
+                bytes.extend(self.read_escape(loc)?);
             } else {
-                chars.push(ch);
+                let mut buf = [0u8; 4];
+                bytes.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
             }
         }
         Err(LexError::UnterminatedString(loc))
     }
 
-    /// Read a single-quoted character literal.
+    /// Read a single-quoted character literal.  The literal must denote
+    /// exactly one byte, as a C character constant does.
     fn read_char(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let ch = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
-        let value = if ch == '\\' {
-            let esc = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
-            match esc {
-                'n' => b'\n',
-                't' => b'\t',
-                'r' => b'\r',
-                '\'' => b'\'',
-                '\\' => b'\\',
-                _ => esc as u8,
-            }
+        let bytes = if ch == '\\' {
+            self.read_escape(loc)?
         } else {
-            ch as u8
+            let mut buf = [0u8; 4];
+            ch.encode_utf8(&mut buf).as_bytes().to_vec()
         };
+        if bytes.len() != 1 {
+            return Err(LexError::MultiByteChar(loc));
+        }
         Ok(Token {
             kind: TokenKind::CHAR,
-            value: Some(TokenValue::Char(value)),
+            value: Some(TokenValue::Char(bytes[0])),
             loc,
         })
+    }
+
+    /// Read one escape sequence; the backslash is already consumed.
+    /// Covers the C23 simple escapes, octal, hexadecimal and universal
+    /// character names (encoded as UTF-8).
+    fn read_escape(&mut self, loc: SourceLocation) -> Result<Vec<u8>, LexError> {
+        let esc = self.advance().ok_or(LexError::UnterminatedEscape(loc))?;
+        let byte = match esc {
+            '\'' => b'\'',
+            '"' => b'"',
+            '?' => b'?',
+            '\\' => b'\\',
+            'a' => 0x07,
+            'b' => 0x08,
+            'f' => 0x0c,
+            'n' => b'\n',
+            'r' => b'\r',
+            't' => b'\t',
+            'v' => 0x0b,
+            '0'..='7' => {
+                let mut value = esc.to_digit(8).unwrap();
+                for _ in 0..2 {
+                    match self.peek().and_then(|c| c.to_digit(8)) {
+                        Some(digit) => {
+                            self.advance();
+                            value = value * 8 + digit;
+                        }
+                        None => break,
+                    }
+                }
+                u8::try_from(value).map_err(|_| LexError::EscapeOutOfRange(loc))?
+            }
+            'x' => {
+                let mut value: u32 = 0;
+                let mut digits = 0;
+                while let Some(digit) = self.peek().and_then(|c| c.to_digit(16)) {
+                    self.advance();
+                    value = value.saturating_mul(16).saturating_add(digit);
+                    digits += 1;
+                }
+                if digits == 0 {
+                    return Err(LexError::InvalidEscape(loc));
+                }
+                u8::try_from(value).map_err(|_| LexError::EscapeOutOfRange(loc))?
+            }
+            'u' | 'U' => {
+                let count = if esc == 'u' { 4 } else { 8 };
+                let mut value: u32 = 0;
+                for _ in 0..count {
+                    let digit = self
+                        .advance()
+                        .and_then(|c| c.to_digit(16))
+                        .ok_or(LexError::InvalidEscape(loc))?;
+                    value = value * 16 + digit;
+                }
+                let ch = char::from_u32(value).ok_or(LexError::InvalidEscape(loc))?;
+                let mut buf = [0u8; 4];
+                return Ok(ch.encode_utf8(&mut buf).as_bytes().to_vec());
+            }
+            other => return Err(LexError::UnknownEscape(other, loc)),
+        };
+        Ok(vec![byte])
     }
 
     /// Read a numeric literal after the `!` prefix (e.g. `!3.14`).

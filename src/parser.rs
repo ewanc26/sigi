@@ -121,7 +121,8 @@ impl<'a> Parser<'a> {
         self.advance()?;
         let header_tok = self.advance()?;
         let header = match header_tok.value {
-            Some(TokenValue::String(s)) => s,
+            Some(TokenValue::String(bytes)) => String::from_utf8(bytes)
+                .map_err(|_| ParseError::ExpectedToken(TokenKind::STRING, header_tok.loc))?,
             _ => return Err(ParseError::ExpectedToken(TokenKind::STRING, header_tok.loc)),
         };
         let name_tok = self.advance()?;
@@ -211,10 +212,10 @@ impl<'a> Parser<'a> {
             } else {
                 0.0
             })),
-            TokenKind::CHAR => Ok(Op::Push(if let Some(TokenValue::Char(c)) = tok.value {
-                c as f64
+            TokenKind::CHAR => Ok(Op::Char(if let Some(TokenValue::Char(c)) = tok.value {
+                c
             } else {
-                0.0
+                0
             })),
             TokenKind::VAR => Ok(Op::Var(VarName::Index(
                 if let Some(TokenValue::Var(n)) = tok.value {
@@ -247,10 +248,10 @@ impl<'a> Parser<'a> {
                 self.consume(TokenKind::ENDCALL)?;
                 Ok(Op::Call(target))
             }
-            TokenKind::STRING => Ok(Op::String(if let Some(TokenValue::String(s)) = tok.value {
-                s
+            TokenKind::STRING => Ok(Op::String(if let Some(TokenValue::String(bytes)) = tok.value {
+                bytes
             } else {
-                "".to_string()
+                Vec::new()
             })),
             TokenKind::WHILE => {
                 let body = self.parse_ops()?;

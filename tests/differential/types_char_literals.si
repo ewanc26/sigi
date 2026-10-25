@@ -1,0 +1,12 @@
+\ Character constants push their C values.
+'A |
+'z |
+'\n |
+'\t |
+'\x41 |
+'\101 |
+'\\ |
+'\' |
+'\0 |
+'a !1 + ^
+'\x7e !1 - |

@@ -153,9 +153,12 @@ impl Codegen {
                     self.c_ident(&TargetName::Named(name.clone()))
                 ));
             }
-            Op::String(val) => {
-                for ch in val.chars() {
-                    lines.push(format!("{}putchar({});", prefix, ch as u8));
+            Op::Char(byte) => {
+                lines.push(format!("{}push('\\x{:02x}');", prefix, byte));
+            }
+            Op::String(bytes) => {
+                for byte in bytes {
+                    lines.push(format!("{}putchar({});", prefix, byte));
                 }
             }
             Op::Call(target) => {

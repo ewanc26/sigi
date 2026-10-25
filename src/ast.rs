@@ -25,8 +25,10 @@ pub enum Op {
     Call(TargetName),
     /// Pop and store to a named variable.
     StoreNamed(String),
-    /// Emit a literal string (printed char-by-char).
-    String(String),
+    /// Emit a literal string (printed byte-by-byte).
+    String(Vec<u8>),
+    /// Push a character constant (its byte value, as a C char constant).
+    Char(u8),
     /// Anonymous block — scopes local ops.
     Block(Vec<Op>),
     /// While loop: repeat body while stack top is nonzero.

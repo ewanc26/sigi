@@ -1,0 +1,8 @@
+\ String escape sequences, written out byte for byte.
+"tab\there\n"
+"quote\" backslash\\ apostrophe\' question\?\n"
+"octal\101\060\n"
+"hex\x41\x62\n"
+"caf\xc3\xa9 é \U0001F600\n"
+"nul\0byte\n"
+"bell\a back\b feed\f vertical\v cr\r\n"
