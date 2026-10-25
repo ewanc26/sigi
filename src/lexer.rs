@@ -27,6 +27,12 @@ pub enum LexError {
     ExpectedDigit(SourceLocation),
     #[error("Expected name after '{0}' at {1:?}")]
     ExpectedName(String, SourceLocation),
+    #[error("Integer constant out of range at {0:?}")]
+    IntegerOutOfRange(SourceLocation),
+    #[error("Invalid digit in octal constant at {0:?}")]
+    InvalidOctal(SourceLocation),
+    #[error("Invalid integer suffix at {0:?}")]
+    InvalidSuffix(SourceLocation),
     #[error("Unexpected character {0:?} at {1:?}")]
     UnexpectedCharacter(char, SourceLocation),
 }
@@ -303,21 +309,59 @@ impl<'a> Lexer<'a> {
 
     /// Read a numeric literal after the `!` prefix (e.g. `!3.14`).
     /// Negative literals use `!-n` syntax.
+    ///
+    /// Integer constants follow C: `0x`/`0X` hexadecimal, `0b`/`0B` binary,
+    /// leading `0` octal, and the `u`/`l`/`ll` suffix family.  Decimal
+    /// floating constants keep their existing spelling.
     fn read_number(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let first = self.peek().ok_or(LexError::ExpectedNumber(loc))?;
         if !first.is_ascii_digit() && first != '-' && first != '.' {
             return Err(LexError::ExpectedNumber(loc));
         }
 
-        let mut num_str = String::new();
-        if first == '-' {
-            num_str.push(self.advance().unwrap());
+        let negative = if first == '-' {
+            self.advance();
             let next = self.peek().ok_or(LexError::ExpectedDigit(loc))?;
             if !next.is_ascii_digit() {
                 return Err(LexError::ExpectedDigit(loc));
             }
+            true
+        } else {
+            false
+        };
+
+        // Hexadecimal (0x) and binary (0b) integer constants.
+        if self.peek() == Some('0') {
+            if let Some(radix_ch) = self
+                .peek_nth(1)
+                .filter(|c| matches!(*c, 'x' | 'X' | 'b' | 'B'))
+            {
+                self.advance();
+                self.advance();
+                let radix = if radix_ch == 'x' || radix_ch == 'X' {
+                    16
+                } else {
+                    2
+                };
+                let mut digits = String::new();
+                while let Some(c) = self.peek() {
+                    if c.is_digit(radix) {
+                        digits.push(self.advance().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if digits.is_empty() {
+                    return Err(LexError::ExpectedNumber(loc));
+                }
+                let magnitude = u64::from_str_radix(&digits, radix)
+                    .map_err(|_| LexError::IntegerOutOfRange(loc))?;
+                return self.integer_token(magnitude, negative, loc);
+            }
         }
 
+        // Decimal digits, with an optional fraction.
+        let mut num_str = String::new();
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '.' {
                 num_str.push(self.advance().unwrap());
@@ -326,10 +370,62 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
+        if num_str.contains('.') {
+            // Floating constants take no integer suffix.
+            let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
+            let val = if negative { -val } else { val };
+            return Ok(Token {
+                kind: TokenKind::NUM,
+                value: Some(TokenValue::Num(val)),
+                loc,
+            });
+        }
+
+        // A leading zero starts an octal constant.
+        let magnitude = if num_str.len() > 1 && num_str.starts_with('0') {
+            if num_str.chars().any(|c| c == '8' || c == '9') {
+                return Err(LexError::InvalidOctal(loc));
+            }
+            u64::from_str_radix(&num_str, 8).map_err(|_| LexError::IntegerOutOfRange(loc))?
+        } else {
+            num_str
+                .parse::<u64>()
+                .map_err(|_| LexError::IntegerOutOfRange(loc))?
+        };
+        self.integer_token(magnitude, negative, loc)
+    }
+
+    /// Finish an integer constant: read its optional suffix and build the token.
+    fn integer_token(
+        &mut self,
+        magnitude: u64,
+        negative: bool,
+        loc: SourceLocation,
+    ) -> Result<Token, LexError> {
+        let mut suffix = String::new();
+        while let Some(c) = self.peek() {
+            if matches!(c, 'u' | 'U' | 'l' | 'L') {
+                suffix.push(self.advance().unwrap());
+            } else {
+                break;
+            }
+        }
+        const SUFFIXES: [&str; 22] = [
+            "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ul", "UL", "lu", "lU", "Lu", "LU", "ull",
+            "uLL", "Ull", "ULL", "llu", "llU", "LLu", "LLU",
+        ];
+        if !suffix.is_empty() && !SUFFIXES.contains(&suffix.as_str()) {
+            return Err(LexError::InvalidSuffix(loc));
+        }
+        if negative && suffix.contains(['u', 'U']) {
+            // `-n` with an unsigned suffix wraps in C; sigi does not model that.
+            return Err(LexError::InvalidSuffix(loc));
+        }
+        let value = magnitude as f64;
+        let value = if negative { -value } else { value };
         Ok(Token {
             kind: TokenKind::NUM,
-            value: Some(TokenValue::Num(val)),
+            value: Some(TokenValue::Num(value)),
             loc,
         })
     }
