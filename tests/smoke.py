@@ -106,7 +106,7 @@ def main() -> int:
             raise AssertionError(f"invalid break was not diagnosed: {failure.stderr!r}")
 
         malformed_if = temp / "malformed if.si"
-        malformed_if.write_text('{ "then" ; }', encoding="utf-8")
+        malformed_if.write_text('{ "then" }', encoding="utf-8")
         failure = run([compiler, str(malformed_if), "-o", str(output_c)], expected_status=1)
         if "unmatched" not in failure.stderr and "separator" not in failure.stderr:
             raise AssertionError(f"malformed conditional was not diagnosed: {failure.stderr!r}")
