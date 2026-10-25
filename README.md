@@ -28,7 +28,7 @@ sigic hello.si --run
 sigic hello.si --run --cc clang
 ```
 
-The current C++ compiler is an early implementation and does not yet cover the full symbol reference below. Its end-to-end path supports numeric, string and character literals, basic stack manipulation, arithmetic, comparisons, logical NOT (`~`), numeric/character I/O, and numbered variable access/storage. Basic `while` loops (`[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) are implemented and smoke-tested. Function definitions/calls, `continue`, named variables, math built-ins, and the advanced memory, FFI, and aggregate facilities remain unsupported end-to-end. Unsupported operations now report a compiler error instead of being silently omitted. See [the audited compiler status](docs/compiler-status.md) for the current boundary and architecture.
+The current C++ compiler is an early implementation and does not yet cover the full symbol reference below. Its end-to-end path supports numeric, string and character literals, basic stack manipulation, arithmetic, comparisons, logical NOT (`~`), numeric/character I/O, and numbered variable access/storage. Basic `while` loops (`[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) are implemented and smoke-tested. Function definitions/calls, named variables, math built-ins, and the advanced memory, FFI, and aggregate facilities remain unsupported end-to-end. Unsupported operations now report a compiler error instead of being silently omitted. See [the audited compiler status](docs/compiler-status.md) for the current boundary and architecture.
 
 The interactive REPL and `--interpret` mode are not implemented. `sigic` requires a source-file path and either `-o <file>` or `--run`.
 
