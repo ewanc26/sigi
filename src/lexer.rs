@@ -4,7 +4,7 @@
 //! keywords.  Identifiers and store-targets use `.` and `:.` prefixes.
 //! The lexer also strips C-style block comments and line comments (`\`).
 
-use crate::ast::SourceLocation;
+use crate::ast::{NumType, SourceLocation};
 use std::iter::Peekable;
 use std::str::Chars;
 use thiserror::Error;
@@ -27,6 +27,20 @@ pub enum LexError {
     ExpectedDigit(SourceLocation),
     #[error("Expected name after '{0}' at {1:?}")]
     ExpectedName(String, SourceLocation),
+    #[error("Integer constant out of range at {0:?}")]
+    IntegerOutOfRange(SourceLocation),
+    #[error("Invalid digit in octal constant at {0:?}")]
+    InvalidOctal(SourceLocation),
+    #[error("Invalid integer suffix at {0:?}")]
+    InvalidSuffix(SourceLocation),
+    #[error("Unknown escape sequence '\\{0}' at {1:?}")]
+    UnknownEscape(char, SourceLocation),
+    #[error("Escape sequence value out of range at {0:?}")]
+    EscapeOutOfRange(SourceLocation),
+    #[error("Malformed escape sequence at {0:?}")]
+    InvalidEscape(SourceLocation),
+    #[error("Character constant must denote one byte at {0:?}")]
+    MultiByteChar(SourceLocation),
     #[error("Unexpected character {0:?} at {1:?}")]
     UnexpectedCharacter(char, SourceLocation),
 }
@@ -101,8 +115,27 @@ pub enum TokenKind {
     LOGOR,
     INTDIV,
     FOR,
+    DO,
+    BREAK,
+    CONTINUE,
+    ENUM,
+    LABEL,
+    GOTO,
+    SWITCH,
+    CASE,
+    DEFAULT,
+    FUNCREF,
+    CALLPTR,
     FfiDecl,
     FfiCall,
+    CAST,
+    SIZEOF,
+    TYPEDEF,
+    ADDRESS,
+    DEREF,
+    DECL,
+    UNION,
+    MEMBER,
     EOF,
 }
 
@@ -118,10 +151,12 @@ pub struct Token {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenValue {
     Num(f64),
+    /// A suffixed integer constant, carrying its exact value and type.
+    Int(i128, NumType),
     Var(usize),
     Ident(String),
     Char(u8),
-    String(String),
+    String(Vec<u8>),
 }
 
 // ─── Lexer ───────────────────────────────────────────────────────
@@ -250,74 +285,165 @@ impl<'a> Lexer<'a> {
 
     // ─── Token Readers ───────────────────────────────────────────
 
-    /// Read a double-quoted string, processing escape sequences.
+    /// Read a double-quoted string.  The result is bytes: source text is
+    /// UTF-8 and escapes produce the bytes C would store for them.
     fn read_string(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
-        let mut chars = String::new();
+        let mut bytes = Vec::new();
         while let Some(ch) = self.advance() {
             if ch == '"' {
                 return Ok(Token {
                     kind: TokenKind::STRING,
-                    value: Some(TokenValue::String(chars)),
+                    value: Some(TokenValue::String(bytes)),
                     loc,
                 });
             }
             if ch == '\\' {
-                let esc = self.advance().ok_or(LexError::UnterminatedString(loc))?;
-                chars.push(match esc {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '\\' => '\\',
-                    '"' => '"',
-                    _ => esc,
-                });
+                bytes.extend(self.read_escape(loc)?);
             } else {
-                chars.push(ch);
+                let mut buf = [0u8; 4];
+                bytes.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
             }
         }
         Err(LexError::UnterminatedString(loc))
     }
 
-    /// Read a single-quoted character literal.
+    /// Read a single-quoted character literal.  The literal must denote
+    /// exactly one byte, as a C character constant does.
     fn read_char(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let ch = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
-        let value = if ch == '\\' {
-            let esc = self.advance().ok_or(LexError::UnterminatedChar(loc))?;
-            match esc {
-                'n' => b'\n',
-                't' => b'\t',
-                'r' => b'\r',
-                '\'' => b'\'',
-                '\\' => b'\\',
-                _ => esc as u8,
-            }
+        let bytes = if ch == '\\' {
+            self.read_escape(loc)?
         } else {
-            ch as u8
+            let mut buf = [0u8; 4];
+            ch.encode_utf8(&mut buf).as_bytes().to_vec()
         };
+        if bytes.len() != 1 {
+            return Err(LexError::MultiByteChar(loc));
+        }
         Ok(Token {
             kind: TokenKind::CHAR,
-            value: Some(TokenValue::Char(value)),
+            value: Some(TokenValue::Char(bytes[0])),
             loc,
         })
     }
 
+    /// Read one escape sequence; the backslash is already consumed.
+    /// Covers the C23 simple escapes, octal, hexadecimal and universal
+    /// character names (encoded as UTF-8).
+    fn read_escape(&mut self, loc: SourceLocation) -> Result<Vec<u8>, LexError> {
+        let esc = self.advance().ok_or(LexError::UnterminatedEscape(loc))?;
+        let byte = match esc {
+            '\'' => b'\'',
+            '"' => b'"',
+            '?' => b'?',
+            '\\' => b'\\',
+            'a' => 0x07,
+            'b' => 0x08,
+            'f' => 0x0c,
+            'n' => b'\n',
+            'r' => b'\r',
+            't' => b'\t',
+            'v' => 0x0b,
+            '0'..='7' => {
+                let mut value = esc.to_digit(8).unwrap();
+                for _ in 0..2 {
+                    match self.peek().and_then(|c| c.to_digit(8)) {
+                        Some(digit) => {
+                            self.advance();
+                            value = value * 8 + digit;
+                        }
+                        None => break,
+                    }
+                }
+                u8::try_from(value).map_err(|_| LexError::EscapeOutOfRange(loc))?
+            }
+            'x' => {
+                let mut value: u32 = 0;
+                let mut digits = 0;
+                while let Some(digit) = self.peek().and_then(|c| c.to_digit(16)) {
+                    self.advance();
+                    value = value.saturating_mul(16).saturating_add(digit);
+                    digits += 1;
+                }
+                if digits == 0 {
+                    return Err(LexError::InvalidEscape(loc));
+                }
+                u8::try_from(value).map_err(|_| LexError::EscapeOutOfRange(loc))?
+            }
+            'u' | 'U' => {
+                let count = if esc == 'u' { 4 } else { 8 };
+                let mut value: u32 = 0;
+                for _ in 0..count {
+                    let digit = self
+                        .advance()
+                        .and_then(|c| c.to_digit(16))
+                        .ok_or(LexError::InvalidEscape(loc))?;
+                    value = value * 16 + digit;
+                }
+                let ch = char::from_u32(value).ok_or(LexError::InvalidEscape(loc))?;
+                let mut buf = [0u8; 4];
+                return Ok(ch.encode_utf8(&mut buf).as_bytes().to_vec());
+            }
+            other => return Err(LexError::UnknownEscape(other, loc)),
+        };
+        Ok(vec![byte])
+    }
+
     /// Read a numeric literal after the `!` prefix (e.g. `!3.14`).
     /// Negative literals use `!-n` syntax.
+    ///
+    /// Integer constants follow C: `0x`/`0X` hexadecimal, `0b`/`0B` binary,
+    /// leading `0` octal, and the `u`/`l`/`ll` suffix family.  Decimal
+    /// floating constants keep their existing spelling.
     fn read_number(&mut self, loc: SourceLocation) -> Result<Token, LexError> {
         let first = self.peek().ok_or(LexError::ExpectedNumber(loc))?;
         if !first.is_ascii_digit() && first != '-' && first != '.' {
             return Err(LexError::ExpectedNumber(loc));
         }
 
-        let mut num_str = String::new();
-        if first == '-' {
-            num_str.push(self.advance().unwrap());
+        let negative = if first == '-' {
+            self.advance();
             let next = self.peek().ok_or(LexError::ExpectedDigit(loc))?;
             if !next.is_ascii_digit() {
                 return Err(LexError::ExpectedDigit(loc));
             }
+            true
+        } else {
+            false
+        };
+
+        // Hexadecimal (0x) and binary (0b) integer constants.
+        if self.peek() == Some('0') {
+            if let Some(radix_ch) = self
+                .peek_nth(1)
+                .filter(|c| matches!(*c, 'x' | 'X' | 'b' | 'B'))
+            {
+                self.advance();
+                self.advance();
+                let radix = if radix_ch == 'x' || radix_ch == 'X' {
+                    16
+                } else {
+                    2
+                };
+                let mut digits = String::new();
+                while let Some(c) = self.peek() {
+                    if c.is_digit(radix) {
+                        digits.push(self.advance().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+                if digits.is_empty() {
+                    return Err(LexError::ExpectedNumber(loc));
+                }
+                let magnitude = u64::from_str_radix(&digits, radix)
+                    .map_err(|_| LexError::IntegerOutOfRange(loc))?;
+                return self.integer_token(magnitude, negative, loc);
+            }
         }
 
+        // Decimal digits, with an optional fraction.
+        let mut num_str = String::new();
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '.' {
                 num_str.push(self.advance().unwrap());
@@ -326,10 +452,88 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
+        if num_str.contains('.') {
+            // Floating constants take no integer suffix.
+            let val: f64 = num_str.parse().map_err(|_| LexError::ExpectedNumber(loc))?;
+            let val = if negative { -val } else { val };
+            return Ok(Token {
+                kind: TokenKind::NUM,
+                value: Some(TokenValue::Num(val)),
+                loc,
+            });
+        }
+
+        // A leading zero starts an octal constant.
+        let magnitude = if num_str.len() > 1 && num_str.starts_with('0') {
+            if num_str.chars().any(|c| c == '8' || c == '9') {
+                return Err(LexError::InvalidOctal(loc));
+            }
+            u64::from_str_radix(&num_str, 8).map_err(|_| LexError::IntegerOutOfRange(loc))?
+        } else {
+            num_str
+                .parse::<u64>()
+                .map_err(|_| LexError::IntegerOutOfRange(loc))?
+        };
+        self.integer_token(magnitude, negative, loc)
+    }
+
+    /// Finish an integer constant: read its optional suffix and build the token.
+    /// Unsuffixed constants stay untyped doubles. A `u` suffix gives `u32`
+    /// (or `u64` when the value does not fit), `l`/`ll` give `i64`, and
+    /// `ul`/`ull` give `u64`.
+    fn integer_token(
+        &mut self,
+        magnitude: u64,
+        negative: bool,
+        loc: SourceLocation,
+    ) -> Result<Token, LexError> {
+        let mut suffix = String::new();
+        while let Some(c) = self.peek() {
+            if matches!(c, 'u' | 'U' | 'l' | 'L') {
+                suffix.push(self.advance().unwrap());
+            } else {
+                break;
+            }
+        }
+        const SUFFIXES: [&str; 22] = [
+            "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ul", "UL", "lu", "lU", "Lu", "LU", "ull",
+            "uLL", "Ull", "ULL", "llu", "llU", "LLu", "LLU",
+        ];
+        if !suffix.is_empty() && !SUFFIXES.contains(&suffix.as_str()) {
+            return Err(LexError::InvalidSuffix(loc));
+        }
+        if negative && suffix.contains(['u', 'U']) {
+            // `-n` with an unsigned suffix wraps in C; sigi does not model that.
+            return Err(LexError::InvalidSuffix(loc));
+        }
+        let signed = if negative {
+            -(magnitude as i128)
+        } else {
+            magnitude as i128
+        };
+        if suffix.is_empty() {
+            return Ok(Token {
+                kind: TokenKind::NUM,
+                value: Some(TokenValue::Num(signed as f64)),
+                loc,
+            });
+        }
+        let unsigned = suffix.contains(['u', 'U']);
+        let ty = if unsigned {
+            if magnitude <= u32::MAX as u64 && !suffix.contains(['l', 'L']) {
+                NumType::U32
+            } else {
+                NumType::U64
+            }
+        } else {
+            if signed < i64::MIN as i128 || signed > i64::MAX as i128 {
+                return Err(LexError::IntegerOutOfRange(loc));
+            }
+            NumType::I64
+        };
         Ok(Token {
             kind: TokenKind::NUM,
-            value: Some(TokenValue::Num(val)),
+            value: Some(TokenValue::Int(signed, ty)),
             loc,
         })
     }
@@ -456,8 +660,27 @@ impl<'a> Lexer<'a> {
             'v' => TokenKind::LOGOR,
             'l' => TokenKind::INTDIV,
             'f' => TokenKind::FOR,
+            'd' => TokenKind::DO,
+            'q' => TokenKind::BREAK,
+            'w' => TokenKind::CONTINUE,
+            'e' => TokenKind::ENUM,
+            'h' => TokenKind::LABEL,
+            'g' => TokenKind::GOTO,
+            's' => TokenKind::SWITCH,
+            'k' => TokenKind::CASE,
+            'm' => TokenKind::DEFAULT,
+            'o' => TokenKind::FUNCREF,
+            'p' => TokenKind::CALLPTR,
             'x' => TokenKind::FfiDecl,
             'c' => TokenKind::FfiCall,
+            'i' => TokenKind::CAST,
+            'z' => TokenKind::SIZEOF,
+            't' => TokenKind::TYPEDEF,
+            'j' => TokenKind::ADDRESS,
+            'y' => TokenKind::DEREF,
+            'r' => TokenKind::DECL,
+            'u' => TokenKind::UNION,
+            'n' => TokenKind::MEMBER,
             _ => return Err(LexError::UnexpectedCharacter(ch, loc)),
         };
         Ok(Token {

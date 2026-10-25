@@ -1,0 +1,2 @@
+{.countdown @ | @ !0 > { !1 - (.countdown) ; } }
+!3 (.countdown)

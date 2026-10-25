@@ -38,7 +38,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 
 | Symbol | Name | Effect |
 |--------|------|--------|
-| `!N` | PUSH | Push number N (int or float) |
+| `!N` | PUSH | Push number N: decimal, `0x` hex, `0b` binary, leading-0 octal, fractions; `u`/`l`/`ll`/`ul`/`ull` suffixes push a typed integer (untyped numbers are `f64`) |
 | `@` | DUP | Duplicate top of stack |
 | `#` | SWAP | Swap top two elements |
 | `$` | DROP | Discard top of stack |
@@ -54,7 +54,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `\|` | PRINT | Pop and print as number |
 | `^` | PRINTC | Pop and print as character |
 | `?` | INPUT | Read number from stdin |
-| `:` | STORE | Pop address, pop value → store to var |
+| `:` | STORE | Pop address, pop value. A pointer stores the value through it; a number names a variable slot |
 | `:.name` | STOREN | Pop value → store to named variable |
 | `.name` | LOADN | Push value of named variable or call function |
 | `<n>` | LOAD | Push value of variable n (digits 0-99) |
@@ -64,8 +64,8 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `{.name body }` | FUNCN | Define named function |
 | `(N)` | CALL | Call function N |
 | `(.name)` | CALLN | Call named function |
-| `"text"` | STRING | Print characters |
-| `'x` | CHAR | Push character code |
+| `"text"` | STRING | Print characters; C escapes (`\n`, `\t`, `\xHH`, `\ooo`, `\uXXXX`, `\UXXXXXXXX`) decode to bytes |
+| `'x` | CHAR | Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
 | `\\` | COMMENT | Line comment |
 | `/* body */` | BLOCK COMMENT | Multi-line comment |
 | `S` | SIN | Pop a → push sin(a) |
@@ -102,6 +102,29 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `f{ body }` | FOR | Pop count, run body that many times |
 | `x "header" .name !N` | FFI_DECL | Declare C function `name` with N double arguments from `<header>`; a `.c` path is compiled and linked from the source's directory |
 | `c .name` | FFI_CALL | Pop N arguments, call declared C function, push result |
+| `d[ body ]` | DO-WHILE | Run body, then repeat while stack top nonzero |
+| `q` | BREAK | Leave the innermost loop or switch |
+| `w` | CONTINUE | Continue the innermost loop |
+| `e{ .A .B .C !5 .D }` | ENUM | Declare integer constants; each takes the previous value + 1 unless followed by `!N` |
+| `h.name` | LABEL | Define a goto label in the current function |
+| `g.name` | GOTO | Jump to a label in the same function |
+| `s{ k!n body m body }` | SWITCH | Pop selector; `k!n` starts a case, `m` the default; arms fall through as in C |
+| `o.name` / `o<n>` | FUNC_REF | Push the index of a function |
+| `p` | CALL_PTR | Pop a function index and call that function |
+| `i.T` | CAST | Pop a, push it converted to type T (`f32`, `f64`, `ld`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`); integer casts wrap, out-of-range float casts exit 1. `ld` is C `long double`, whose width is the target's |
+| `j.name` / `j<n>` | ADDRESS | Push a pointer to a named or numbered variable cell |
+| `y` | DEREF | Pop a pointer, push the value it points to |
+| `z` | SIZEOF | Pop a, push its size in bytes (`u64`) |
+| `z.T` | SIZEOF_TYPE | Push the size in bytes of type T |
+| `z.Name` | SIZEOF_AGG | Push the size in bytes of struct Name |
+| `r.Name{ .f .T ... }` | DECL | Define struct Name; each member is `.name` then a scalar type or an earlier struct |
+| `r.Name .obj` | DECL | Declare a struct object named obj |
+| `r.Name .obj = { ... }` | DECL | Declare a struct object, filling members in order from a brace list; nested braces fill struct members, and missing members are zeroed |
+| `u.Name{ .f .T ... }` | UNION | Define union Name; members share storage, each starting at offset 0 |
+| `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
+| `r .T [ !N ... ] .name` | DECL | Declare an array of scalar or struct type T with the given extents (one or more, after the type). A multi-dimensional array decays to a pointer to its rows. `+`/`-` on a pointer step by the size of what it addresses, so for a row pointer one step is a whole row |
+| `r .static .T .name` / `r .const .T .name` | DECL | `.static` is the file-scope default (accepted for explicitness); `.const` objects cannot be assigned with `:.name`, and a store through a pointer to one (`j.name` or a member pointer) exits 1 at run time. Qualifiers go before the type, and only on objects, not on struct definitions |
+| `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
 ## Error handling
 

@@ -1,0 +1,12 @@
+\ long double: C arithmetic, mixed promotion, truncation, and f32 rounding
+!1 i.ld !3 i.ld / |
+!-7 i.ld !3 i.ld % |
+!7 i.i32 i.ld !2 i.ld / |
+!2.5 i.ld !1.5 i.f32 * |
+!16777217 i.f32 i.ld |
+!-3.9 i.ld i.i32 |
+z.ld |
+\ Legacy arrays keep the type of each stored element.
+!4 !0 _
+!1 i.f32 !3 i.f32 / !0 !1 a
+!0 !1 A |

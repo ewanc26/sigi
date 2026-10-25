@@ -1,0 +1,4 @@
+{.one !1 | }
+{.two !2 | }
+{7 !77 | }
+o.one p o.two p o7 p o.one p

@@ -1,0 +1,12 @@
+\ Hexadecimal, binary, octal and suffixed integer constants.
+!0xFF |
+!0X10 |
+!0b1011 |
+!0B11 |
+!017 |
+!0 |
+!-0x10 |
+!10UL |
+!42ll |
+!007.5 |
+!7 !0x1F + |

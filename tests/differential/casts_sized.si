@@ -1,0 +1,13 @@
+\ Casts with i.T wrap integers to their width; sizeof reports C sizes.
+!300u i.u8 |
+!-1l i.u16 |
+!200u i.i8 |
+!3.9 i.i32 |
+!-3.9 i.i32 |
+!65537u i.u16 i.i32 |
+!255u i.i8 |
+!2.5 i.f32 |
+z.i16 |
+z.f64 |
+z.u32 |
+!7u z |

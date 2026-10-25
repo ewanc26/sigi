@@ -1,0 +1,15 @@
+\\ Struct definitions, struct objects, member access through n, and sizeof.
+r.Pt{ .x .f64 .y .i32 }
+r.Seg{ .a .Pt .b .Pt }
+r.Pt .origin
+r.Seg .line
+z.Pt |
+z.Seg |
+!2.5 j.origin n.x :
+!7 j.origin n.y :
+j.origin n.x y |
+j.origin n.y y |
+!9 j.line n.b n.y :
+j.line n.b n.y y |
+j.line n.a j.line = |
+j.line n.a n.x j.line n.a = |
