@@ -10,13 +10,12 @@ All syntax is symbolic. No alphanumeric keywords. User-defined names are prefixe
 
 ## Install
 
-Requires a Rust toolchain (`cargo`).
-
 ```sh
-cargo install --path .
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
-This installs the `sigic` compiler into `~/.cargo/bin`.
+The binary is `build/sigic`.
 
 ## Usage
 

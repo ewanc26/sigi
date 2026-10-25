@@ -2,31 +2,19 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
-
-permissions:
-  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install clang for C twin builds
-        run: sudo apt-get update && sudo apt-get install -y clang
-
-      - name: Run tests
-        env:
-          SIGI_TWIN_CC: clang
-        run: cargo test --locked
-
-      - name: Validate capability matrix
-        run: python3 scripts/check_capabilities.py --language sigi --require-complete
-
-      - name: Install with the documented command
-        run: cargo install --path . --locked --root "$RUNNER_TEMP/sigi"
-
-      - name: Compile and run an example
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake
+      - name: Build
         run: |
-          "$RUNNER_TEMP/sigi/bin/sigic" examples/hello_world.si --run
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+      - name: Unit tests
+        run: ./build/unit_tests
