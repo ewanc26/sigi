@@ -1,0 +1,5 @@
+\ Typedef aliases name a scalar type for later casts and sizeof.
+t.byte .u8
+!300u i.byte |
+!7 i.byte z |
+!200u i.byte !100u i.byte + |
