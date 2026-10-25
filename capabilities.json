@@ -316,8 +316,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/expr_ternary.si"
+          ]
         }
       }
     },
@@ -340,8 +342,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/expr_compound_assign.si"
+          ]
         }
       }
     },
@@ -364,8 +368,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/expr_incdec.si"
+          ]
         }
       }
     },
@@ -412,8 +418,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/expr_comma.si"
+          ]
         }
       }
     },
@@ -556,8 +564,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/func_recursion.si"
+          ]
         }
       }
     },
