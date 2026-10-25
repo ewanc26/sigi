@@ -42,6 +42,7 @@ Program Parser::parse(){
         if(t.kind=="CALLFUNC"){ op.kind=SOp::CallFunc; op.funcNum=(int)t.ival; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="CALLNAMED"){ op.kind=SOp::CallNamed; op.name=t.name; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="BREAK"){ op.kind=SOp::Break; advance(); mainOps.push_back(op); continue; }
+        if(t.kind=="CONTINUE"){ op.kind=SOp::Continue; advance(); mainOps.push_back(op); continue; }
 
         if(t.kind=="S"){ op.kind=SOp::Sin; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="C"){ op.kind=SOp::Cos; advance(); mainOps.push_back(op); continue; }
@@ -79,12 +80,15 @@ Program Parser::parse(){
                 throw std::runtime_error("if-else block is missing ';' separator");
             }
             controls.pop_back();
-        } else if (op.kind == SOp::Break) {
+        } else if (op.kind == SOp::Break || op.kind == SOp::Continue) {
             bool insideLoop = false;
             for (auto frame = controls.rbegin(); frame != controls.rend(); ++frame) {
                 if (frame->kind == SOp::WhileStart) { insideLoop = true; break; }
             }
-            if (!insideLoop) throw std::runtime_error("break used outside a loop");
+            if (!insideLoop) {
+                throw std::runtime_error(op.kind == SOp::Break
+                    ? "break used outside a loop" : "continue used outside a loop");
+            }
         }
     }
     if (!controls.empty()) {
