@@ -183,8 +183,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no aggregate types with named members"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_structs.si"
+          ]
         }
       }
     },

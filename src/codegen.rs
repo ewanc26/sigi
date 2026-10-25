@@ -4,7 +4,7 @@
 //! fixed stack array and runtime prelude.  The generated code is
 //! portable C99 and links against libm.
 
-use crate::ast::{walk_ops, Op, Program, TargetName, VarName};
+use crate::ast::{walk_ops, Op, Program, TargetName, TypeRef, VarName};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct Codegen {
@@ -45,6 +45,58 @@ impl Codegen {
             lines.push(format!("double {}({params});", f.name));
         }
 
+        // ─── Struct Definitions and Descriptors ──────────────────
+        // Each struct is a C struct plus a descriptor the runtime uses to
+        // find members by name. Members are emitted in definition order,
+        // so a struct member's descriptor is always declared before use.
+        for agg in &self.program.aggregates {
+            lines.push(format!("struct {} {{", self.agg_tag(&agg.name)));
+            for field in &agg.fields {
+                let ty = match &field.ty {
+                    TypeRef::Scalar(t) => t.c_type().to_string(),
+                    TypeRef::Aggregate(n) => format!("struct {}", self.agg_tag(n)),
+                };
+                lines.push(format!(
+                    "    {} f_{};",
+                    ty,
+                    self.c_ident(&TargetName::Named(field.name.clone()))
+                ));
+            }
+            lines.push("};".to_string());
+            lines.push(format!(
+                "const sg_field {}_fields[] = {{",
+                self.agg_tag(&agg.name)
+            ));
+            for field in &agg.fields {
+                let member = self.c_ident(&TargetName::Named(field.name.clone()));
+                let (kind, pt, sub) = match &field.ty {
+                    TypeRef::Scalar(t) => {
+                        ("SG_PK_SCALAR", t.c_tag().to_string(), "NULL".to_string())
+                    }
+                    TypeRef::Aggregate(n) => (
+                        "SG_PK_AGG",
+                        "SG_F64".to_string(),
+                        format!("&{}_desc", self.agg_tag(n)),
+                    ),
+                };
+                lines.push(format!(
+                    "    {{\"{}\", offsetof(struct {}, f_{member}), {kind}, {pt}, {sub}}},",
+                    field.name,
+                    self.agg_tag(&agg.name)
+                ));
+            }
+            lines.push("};".to_string());
+            lines.push(format!(
+                "const sg_agg {}_desc = {{\"{}\", sizeof(struct {}), {}, {}_fields}};",
+                self.agg_tag(&agg.name),
+                agg.name,
+                self.agg_tag(&agg.name),
+                agg.fields.len(),
+                self.agg_tag(&agg.name)
+            ));
+            lines.push("".to_string());
+        }
+
         // ─── Named Variable Declarations ─────────────────────────
         let mut named_vars = HashSet::new();
         self.collect_vars(&self.program.main_code, &mut named_vars);
@@ -52,13 +104,23 @@ impl Codegen {
             self.collect_vars(&fn_.body, &mut named_vars);
         }
 
-        let mut sorted_vars: Vec<_> = named_vars.into_iter().collect();
+        let mut sorted_vars: Vec<_> = named_vars
+            .into_iter()
+            .filter(|name| self.object_agg(name).is_none())
+            .collect();
         sorted_vars.sort();
 
         for name in sorted_vars {
             lines.push(format!(
                 "static sv var_{} = {{0}};",
                 self.c_ident(&TargetName::Named(name))
+            ));
+        }
+        for object in &self.program.objects {
+            lines.push(format!(
+                "struct {} var_{};",
+                self.agg_tag(&object.agg),
+                self.c_ident(&TargetName::Named(object.name.clone()))
             ));
         }
 
@@ -82,7 +144,9 @@ impl Codegen {
             uses_call_ptr |= matches!(op, Op::CallPtr)
         });
         for fn_ in &self.program.functions {
-            walk_ops(&fn_.body, &mut |op| uses_call_ptr |= matches!(op, Op::CallPtr));
+            walk_ops(&fn_.body, &mut |op| {
+                uses_call_ptr |= matches!(op, Op::CallPtr)
+            });
         }
         if uses_call_ptr {
             lines.push("static void sigi_call_ptr(double _idx) {".to_string());
@@ -155,6 +219,35 @@ impl Codegen {
         }
     }
 
+    /// The struct a named object was declared with, if `name` is an object.
+    fn object_agg(&self, name: &str) -> Option<&str> {
+        self.program
+            .objects
+            .iter()
+            .find(|o| o.name == name)
+            .map(|o| o.agg.as_str())
+    }
+
+    /// The C struct tag for a sigi struct name.
+    fn agg_tag(&self, name: &str) -> String {
+        format!("agg_{}", self.c_ident(&TargetName::Named(name.to_string())))
+    }
+
+    /// C expression for a pointer to a named object, or to a variable cell.
+    fn named_addr(&self, name: &str) -> String {
+        match self.object_agg(name) {
+            Some(agg) => format!(
+                "sg_agg_ptr(&var_{}, &{}_desc)",
+                self.c_ident(&TargetName::Named(name.to_string())),
+                self.agg_tag(agg)
+            ),
+            None => format!(
+                "sg_ptr_to(&var_{})",
+                self.c_ident(&TargetName::Named(name.to_string()))
+            ),
+        }
+    }
+
     /// Convert a TargetName into a valid C identifier string.
     fn c_ident(&self, name: &TargetName) -> String {
         match name {
@@ -188,8 +281,18 @@ impl Codegen {
                 "{prefix}pushv(sg_from_bits(SG_U64, sizeof({})));",
                 ty.c_type()
             )),
+            Op::SizeOfAgg(name) => lines.push(format!(
+                "{prefix}pushv(sg_from_bits(SG_U64, sizeof(struct {})));",
+                self.agg_tag(name)
+            )),
+            Op::Member(name) => {
+                lines.push(format!("{prefix}pushv(sg_member(popv(), \"{name}\"));"))
+            }
             Op::Var(name) => match name {
                 VarName::Index(i) => lines.push(format!("{}pushv(vars[{}]);", prefix, i)),
+                VarName::Named(n) if self.object_agg(n).is_some() => {
+                    lines.push(format!("{prefix}pushv({});", self.named_addr(n)))
+                }
                 VarName::Named(n) => lines.push(format!(
                     "{}pushv(var_{});",
                     prefix,
@@ -198,11 +301,7 @@ impl Codegen {
             },
             Op::AddrOf(name) => match name {
                 VarName::Index(i) => lines.push(format!("{prefix}pushv(sg_ptr_to(&vars[{i}]));")),
-                VarName::Named(n) => lines.push(format!(
-                    "{}pushv(sg_ptr_to(&var_{}));",
-                    prefix,
-                    self.c_ident(&TargetName::Named(n.clone()))
-                )),
+                VarName::Named(n) => lines.push(format!("{prefix}pushv({});", self.named_addr(n))),
             },
             Op::StoreNamed(name) => {
                 lines.push(format!(
@@ -243,7 +342,9 @@ impl Codegen {
             Op::For(body) => {
                 lines.push(format!("{prefix}{{"));
                 lines.push(format!("{prefix}    long long _count = (long long)pop();"));
-                lines.push(format!("{prefix}    for (long long _i = 0; _i < _count; _i++) {{"));
+                lines.push(format!(
+                    "{prefix}    for (long long _i = 0; _i < _count; _i++) {{"
+                ));
                 for op in body {
                     lines.extend(self.codegen_op(op, indent + 2));
                 }
@@ -257,7 +358,9 @@ impl Codegen {
                 for op in body {
                     lines.extend(self.codegen_op(op, indent + 1));
                 }
-                lines.push(format!("{prefix}}} while (sp > 0 && sg_truthy(stack[sp - 1]));"));
+                lines.push(format!(
+                    "{prefix}}} while (sp > 0 && sg_truthy(stack[sp - 1]));"
+                ));
             }
             Op::Break => lines.push(format!("{prefix}break;")),
             Op::Continue => lines.push(format!("{prefix}continue;")),

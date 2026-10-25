@@ -101,6 +101,10 @@ pub enum Op {
     SizeOf,
     /// Push the size in bytes of a type, written `z.T`.
     SizeOfType(NumType),
+    /// Push the size in bytes of a struct, written `z.Name`.
+    SizeOfAgg(String),
+    /// Pop a pointer to a struct and push the address of one of its members, written `n.name`.
+    Member(String),
     /// Push the value of a variable (indexed or named).
     Var(VarName),
     /// Push a pointer to a variable cell, written `j.name` or `j<n>`.
@@ -178,6 +182,35 @@ pub fn walk_ops(ops: &[Op], f: &mut impl FnMut(&Op)) {
     }
 }
 
+/// The type of a struct member or object: a scalar, or a struct defined earlier.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeRef {
+    Scalar(NumType),
+    Aggregate(String),
+}
+
+/// One member of a struct.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Field {
+    pub name: String,
+    pub ty: TypeRef,
+}
+
+/// A struct definition, written `r.Name{ .x .f64 .y .i32 }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AggregateDef {
+    pub name: String,
+    pub fields: Vec<Field>,
+}
+
+/// A named struct object declared with `r .Name .obj`.  It is a C struct
+/// variable of the named struct type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectDecl {
+    pub name: String,
+    pub agg: String,
+}
+
 /// Reference to a variable slot.
 #[derive(Debug, Clone, PartialEq)]
 pub enum VarName {
@@ -224,4 +257,6 @@ pub struct Program {
     pub functions: Vec<Function>,
     pub main_code: Vec<Op>,
     pub foreign: Vec<ForeignFn>,
+    pub aggregates: Vec<AggregateDef>,
+    pub objects: Vec<ObjectDecl>,
 }

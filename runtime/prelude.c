@@ -8,9 +8,11 @@
  * Variables: 100 indexed slots for numbered vars.
  */
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <time.h>
 #include <unistd.h>
@@ -31,9 +33,38 @@ typedef enum { SG_F64, SG_F32, SG_LD, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U
 typedef enum { SG_OP_ADD, SG_OP_SUB, SG_OP_MUL, SG_OP_DIV, SG_OP_MOD } sg_op;
 typedef enum { SG_REL_EQ, SG_REL_LT, SG_REL_GT } sg_relop;
 
+/* What a pointer addresses: a variable cell (an sv), one scalar member of
+ * a struct, or a whole struct object. */
+typedef enum { SG_PK_CELL, SG_PK_SCALAR, SG_PK_AGG } sg_pk;
+
+typedef struct sg_agg sg_agg;
+
+/* One member of a struct descriptor: its name, byte offset and kind. */
+typedef struct {
+    const char *name;
+    size_t off;
+    sg_pk kind;
+    sg_ty pt;
+    const sg_agg *agg;
+} sg_field;
+
+struct sg_agg {
+    const char *name;
+    size_t size;
+    int nfields;
+    const sg_field *fields;
+};
+
+typedef struct {
+    void *addr;
+    sg_pk kind;
+    sg_ty pt;             /* scalar type when kind is SG_PK_SCALAR */
+    const sg_agg *agg;    /* struct descriptor when kind is SG_PK_AGG */
+} sg_ptr;
+
 typedef struct {
     sg_ty t;
-    union { double d; long double ld; long long s; unsigned long long u; void *p; } v;
+    union { double d; long double ld; long long s; unsigned long long u; sg_ptr ptr; } v;
 } sv;
 
 static void sg_fail(const char *msg) { fprintf(stderr, "%s\n", msg); exit(1); }
@@ -130,7 +161,7 @@ static long long sg_as_ll(sv x) {
 }
 
 static int sg_truthy(sv x) {
-    if (x.t == SG_PTR) return x.v.p != NULL;
+    if (x.t == SG_PTR) return x.v.ptr.addr != NULL;
     return sg_is_float(x.t) ? sg_fval(x) != 0.0L : sg_bits_of(x) != 0; }
 
 static sg_ty sg_promote(sg_ty t) {
@@ -212,7 +243,7 @@ static sv sg_arith(sg_op op, sv a, sv b) {
 static int sg_rel(sg_relop op, sv a, sv b) {
     if (a.t == SG_PTR || b.t == SG_PTR) {
         if (a.t != b.t) sg_fail("Comparison of a pointer with a number");
-        uintptr_t p = (uintptr_t)a.v.p, q = (uintptr_t)b.v.p;
+        uintptr_t p = (uintptr_t)a.v.ptr.addr, q = (uintptr_t)b.v.ptr.addr;
         switch (op) {
         case SG_REL_EQ: return p == q;
         case SG_REL_LT: return p < q;
@@ -241,7 +272,7 @@ static int sg_rel(sg_relop op, sv a, sv b) {
 }
 
 static void sg_print(sv x) {
-    if (x.t == SG_PTR) printf("%p\n", x.v.p);
+    if (x.t == SG_PTR) printf("%p\n", x.v.ptr.addr);
     else if (x.t == SG_LD) printf("%Lg\n", x.v.ld);
     else if (sg_is_float(x.t)) printf("%g\n", x.v.d);
     else if (sg_is_signed(x.t)) printf("%lld\n", x.v.s);
@@ -306,23 +337,95 @@ static double pop(void) {
 }
 
 /* ── Pointers ──────────────────────────────────────────────────────
- * A pointer is an SG_PTR value holding the address of a variable cell
- * (an sv).  `j` takes an address, `y` loads through one, and `:` stores
- * through one. */
+ * A pointer is an SG_PTR value.  It addresses a variable cell (an sv, from
+ * `j.name` or `j<n>`), one scalar member of a struct (typed memory), or a
+ * whole struct object.  `j` takes an address, `y` loads through one, `:`
+ * stores through one, and `n.field` yields a pointer to a member. */
 
-static sv sg_ptr_to(sv *cell) {
+static sv sg_ptr_value(void *addr, sg_pk kind, sg_ty pt, const sg_agg *agg) {
     sv r;
     r.t = SG_PTR;
-    r.v.p = cell;
+    r.v.ptr.addr = addr;
+    r.v.ptr.kind = kind;
+    r.v.ptr.pt = pt;
+    r.v.ptr.agg = agg;
     return r;
+}
+
+static sv sg_ptr_to(sv *cell) { return sg_ptr_value(cell, SG_PK_CELL, SG_F64, NULL); }
+
+static sv sg_agg_ptr(void *obj, const sg_agg *agg) {
+    return sg_ptr_value(obj, SG_PK_AGG, SG_F64, agg);
+}
+
+/* Load a scalar of type t from typed memory. */
+static sv sg_read_scalar(const void *addr, sg_ty t) {
+    sv r;
+    switch (t) {
+    case SG_F64: { double x; memcpy(&x, addr, sizeof x); r.t = SG_F64; r.v.d = x; return r; }
+    case SG_F32: { float x; memcpy(&x, addr, sizeof x); r.t = SG_F32; r.v.d = x; return r; }
+    case SG_LD: { long double x; memcpy(&x, addr, sizeof x); r.t = SG_LD; r.v.ld = x; return r; }
+    case SG_I8: { int8_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, (unsigned long long)(long long)x); }
+    case SG_U8: { uint8_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, x); }
+    case SG_I16: { int16_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, (unsigned long long)(long long)x); }
+    case SG_U16: { uint16_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, x); }
+    case SG_I32: { int32_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, (unsigned long long)(long long)x); }
+    case SG_U32: { uint32_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, x); }
+    case SG_I64: { int64_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, (unsigned long long)x); }
+    case SG_U64: { uint64_t x; memcpy(&x, addr, sizeof x); return sg_from_bits(t, x); }
+    default: sg_fail("Load of a non-scalar member");
+    }
+    return r;
+}
+
+/* Store val, converted to type t, into typed memory. */
+static void sg_write_scalar(void *addr, sg_ty t, sv val) {
+    sv c = sg_cast(val, t);
+    switch (t) {
+    case SG_F64: memcpy(addr, &c.v.d, sizeof(double)); return;
+    case SG_F32: { float x = (float)c.v.d; memcpy(addr, &x, sizeof x); return; }
+    case SG_LD: memcpy(addr, &c.v.ld, sizeof(long double)); return;
+    default: break;
+    }
+    unsigned long long bits = sg_bits_of(c);
+    switch (t) {
+    case SG_I8: case SG_U8: { uint8_t x = (uint8_t)bits; memcpy(addr, &x, sizeof x); return; }
+    case SG_I16: case SG_U16: { uint16_t x = (uint16_t)bits; memcpy(addr, &x, sizeof x); return; }
+    case SG_I32: case SG_U32: { uint32_t x = (uint32_t)bits; memcpy(addr, &x, sizeof x); return; }
+    default: { uint64_t x = (uint64_t)bits; memcpy(addr, &x, sizeof x); return; }
+    }
 }
 
 static sv sg_deref(sv p) {
     if (p.t != SG_PTR) sg_fail("Dereference of a non-pointer");
-    return *(sv *)p.v.p;
+    switch (p.v.ptr.kind) {
+    case SG_PK_CELL: return *(sv *)p.v.ptr.addr;
+    case SG_PK_SCALAR: return sg_read_scalar(p.v.ptr.addr, p.v.ptr.pt);
+    default: sg_fail("A struct has no single value; load a member");
+    }
+    return p;
 }
 
 static void sg_store_ptr(sv p, sv val) {
     if (p.t != SG_PTR) sg_fail("Store through a non-pointer");
-    *(sv *)p.v.p = val;
+    switch (p.v.ptr.kind) {
+    case SG_PK_CELL: *(sv *)p.v.ptr.addr = val; return;
+    case SG_PK_SCALAR: sg_write_scalar(p.v.ptr.addr, p.v.ptr.pt, val); return;
+    default: sg_fail("A struct cannot be stored as a whole; store a member");
+    }
 }
+
+/* `n.name`: a pointer to the named member of the struct that p addresses. */
+static sv sg_member(sv p, const char *name) {
+    if (p.t != SG_PTR || p.v.ptr.kind != SG_PK_AGG) sg_fail("Member access needs a pointer to a struct");
+    const sg_agg *a = p.v.ptr.agg;
+    for (int i = 0; i < a->nfields; i++) {
+        const sg_field *f = &a->fields[i];
+        if (strcmp(f->name, name) == 0) {
+            return sg_ptr_value((char *)p.v.ptr.addr + f->off, f->kind, f->pt, f->agg);
+        }
+    }
+    sg_fail("No such struct member");
+    return p;
+}
+

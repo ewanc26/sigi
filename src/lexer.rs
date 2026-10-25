@@ -133,6 +133,8 @@ pub enum TokenKind {
     TYPEDEF,
     ADDRESS,
     DEREF,
+    DECL,
+    MEMBER,
     EOF,
 }
 
@@ -675,6 +677,8 @@ impl<'a> Lexer<'a> {
             't' => TokenKind::TYPEDEF,
             'j' => TokenKind::ADDRESS,
             'y' => TokenKind::DEREF,
+            'r' => TokenKind::DECL,
+            'n' => TokenKind::MEMBER,
             _ => return Err(LexError::UnexpectedCharacter(ch, loc)),
         };
         Ok(Token {

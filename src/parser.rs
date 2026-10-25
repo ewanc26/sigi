@@ -5,8 +5,8 @@
 //! Everything else is a single-token primitive.
 
 use crate::ast::{
-    walk_ops, ForeignFn, Function, NumType, Op, Program, SourceLocation, SwitchArm, TargetName,
-    VarName,
+    walk_ops, AggregateDef, Field, ForeignFn, Function, NumType, ObjectDecl, Op, Program,
+    SourceLocation, SwitchArm, TargetName, TypeRef, VarName,
 };
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
 use std::collections::{HashMap, HashSet};
@@ -56,6 +56,16 @@ pub enum ParseError {
     UnknownType(String, SourceLocation),
     #[error("Type name {0} is already defined at {1:?}")]
     DuplicateTypedef(String, SourceLocation),
+    #[error("{0} is already defined at {1:?}")]
+    DuplicateDefinition(String, SourceLocation),
+    #[error("Struct {0} has no members at {1:?}")]
+    EmptyAggregate(String, SourceLocation),
+    #[error("Member {0} is declared twice at {1:?}")]
+    DuplicateMember(String, SourceLocation),
+    #[error("{0} is a struct and cannot be stored to directly at {1:?}")]
+    NotAssignable(String, SourceLocation),
+    #[error("Object {0} needs a struct type at {1:?}")]
+    ObjectNeedsStruct(String, SourceLocation),
 }
 
 // ─── Parser ──────────────────────────────────────────────────────
@@ -74,6 +84,10 @@ pub struct Parser<'a> {
     named_refs: HashSet<String>,
     fn_names: HashSet<String>,
     typedefs: HashMap<String, NumType>,
+    aggregates: Vec<AggregateDef>,
+    agg_index: HashMap<String, usize>,
+    objects: HashMap<String, String>,
+    object_list: Vec<ObjectDecl>,
 }
 
 impl<'a> Parser<'a> {
@@ -87,6 +101,10 @@ impl<'a> Parser<'a> {
             named_refs: HashSet::new(),
             fn_names: HashSet::new(),
             typedefs: HashMap::new(),
+            aggregates: Vec::new(),
+            agg_index: HashMap::new(),
+            objects: HashMap::new(),
+            object_list: Vec::new(),
         }
     }
 
@@ -143,6 +161,10 @@ impl<'a> Parser<'a> {
                 self.parse_typedef()?;
                 continue;
             }
+            if self.peek()?.kind == TokenKind::DECL {
+                self.parse_decl()?;
+                continue;
+            }
             let tok = self.peek()?;
             if tok.kind == TokenKind::BLOCK {
                 // Peek at the second token — if it's a var or ident this
@@ -181,6 +203,8 @@ impl<'a> Parser<'a> {
             functions,
             main_code,
             foreign: std::mem::take(&mut self.foreign),
+            aggregates: std::mem::take(&mut self.aggregates),
+            objects: std::mem::take(&mut self.object_list),
         })
     }
 
@@ -288,6 +312,26 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Resolve a name used as a member or object type: a struct, or a scalar.
+    fn resolve_typeref(&self, name: &str) -> Option<TypeRef> {
+        if self.agg_index.contains_key(name) {
+            return Some(TypeRef::Aggregate(name.to_string()));
+        }
+        self.resolve_type(name).map(TypeRef::Scalar)
+    }
+
+    /// The struct named by the next token, if it names one. Does not consume it.
+    fn peek_aggregate_name(&mut self) -> Option<String> {
+        match self.lexer.peek() {
+            Some(Ok(Token {
+                kind: TokenKind::IDENT,
+                value: Some(TokenValue::Ident(name)),
+                ..
+            })) if self.agg_index.contains_key(name) => Some(name.clone()),
+            _ => None,
+        }
+    }
+
     fn resolve_type(&self, name: &str) -> Option<NumType> {
         self.typedefs
             .get(name)
@@ -306,6 +350,77 @@ impl<'a> Parser<'a> {
             _ => return None,
         };
         self.resolve_type(&name)
+    }
+
+    // ─── Declarations ───────────────────────────────────────────
+
+    /// Parse a declaration that starts with `r`: a struct definition
+    /// `r.Name{ ... }` or an object declaration `r .Type .name`.
+    fn parse_decl(&mut self) -> Result<(), ParseError> {
+        self.consume(TokenKind::DECL)?;
+        let first = self.advance()?;
+        let first_name = ident_name(first.clone())?;
+        if self.peek()?.kind == TokenKind::BLOCK {
+            return self.parse_struct(first_name, first.loc);
+        }
+        if !self.agg_index.contains_key(&first_name) {
+            if self.resolve_type(&first_name).is_some() {
+                return Err(ParseError::ObjectNeedsStruct(first_name, first.loc));
+            }
+            return Err(ParseError::UnknownType(first_name, first.loc));
+        }
+        let name_tok = self.advance()?;
+        let name = ident_name(name_tok.clone())?;
+        if self.objects.contains_key(&name)
+            || self.enum_consts.contains_key(&name)
+            || self.named_refs.contains(&name)
+        {
+            return Err(ParseError::DuplicateDefinition(name, name_tok.loc));
+        }
+        self.objects.insert(name.clone(), first_name.clone());
+        self.object_list.push(ObjectDecl {
+            name,
+            agg: first_name,
+        });
+        Ok(())
+    }
+
+    /// Parse the body of `r.Name{ .x .f64 .y .i32 }`. Each member is a name
+    /// followed by a scalar type or a struct defined earlier.
+    fn parse_struct(&mut self, name: String, loc: SourceLocation) -> Result<(), ParseError> {
+        if self.agg_index.contains_key(&name)
+            || NumType::from_name(&name).is_some()
+            || self.typedefs.contains_key(&name)
+        {
+            return Err(ParseError::DuplicateDefinition(name, loc));
+        }
+        self.consume(TokenKind::BLOCK)?;
+        let mut fields: Vec<Field> = Vec::new();
+        loop {
+            let tok = self.advance()?;
+            match tok.kind {
+                TokenKind::ENDB => break,
+                TokenKind::IDENT => {
+                    let field = ident_name(tok.clone())?;
+                    let ty_tok = self.advance()?;
+                    let ty_name = ident_name(ty_tok.clone())?;
+                    let ty = self
+                        .resolve_typeref(&ty_name)
+                        .ok_or_else(|| ParseError::UnknownType(ty_name, ty_tok.loc))?;
+                    if fields.iter().any(|f| f.name == field) {
+                        return Err(ParseError::DuplicateMember(field, tok.loc));
+                    }
+                    fields.push(Field { name: field, ty });
+                }
+                _ => return Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
+            }
+        }
+        if fields.is_empty() {
+            return Err(ParseError::EmptyAggregate(name, loc));
+        }
+        self.agg_index.insert(name.clone(), self.aggregates.len());
+        self.aggregates.push(AggregateDef { name, fields });
+        Ok(())
     }
 
     // ─── Functions ──────────────────────────────────────────────
@@ -445,8 +560,18 @@ impl<'a> Parser<'a> {
                     self.advance()?;
                     Ok(Op::SizeOfType(ty))
                 }
-                None => Ok(Op::SizeOf),
+                None => match self.peek_aggregate_name() {
+                    Some(name) => {
+                        self.advance()?;
+                        Ok(Op::SizeOfAgg(name))
+                    }
+                    None => Ok(Op::SizeOf),
+                },
             },
+            TokenKind::MEMBER => {
+                let name_tok = self.advance()?;
+                Ok(Op::Member(ident_name(name_tok)?))
+            }
             TokenKind::TYPEDEF => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
             TokenKind::CHAR => Ok(Op::Char(if let Some(TokenValue::Char(c)) = tok.value {
                 c
@@ -478,6 +603,9 @@ impl<'a> Parser<'a> {
                 };
                 if self.enum_consts.contains_key(&name) {
                     return Err(ParseError::NameConflict(name, tok.loc));
+                }
+                if self.objects.contains_key(&name) {
+                    return Err(ParseError::NotAssignable(name, tok.loc));
                 }
                 self.named_refs.insert(name.clone());
                 Ok(Op::StoreNamed(name))
@@ -575,9 +703,11 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Op::Continue)
             }
-            TokenKind::FfiDecl | TokenKind::ENUM | TokenKind::CASE | TokenKind::DEFAULT => {
-                Err(ParseError::UnexpectedToken(tok.kind, tok.loc))
-            }
+            TokenKind::FfiDecl
+            | TokenKind::ENUM
+            | TokenKind::DECL
+            | TokenKind::CASE
+            | TokenKind::DEFAULT => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
             TokenKind::FfiCall => {
                 let name_tok = self.advance()?;
                 let name = match name_tok.value {
@@ -612,6 +742,14 @@ impl<'a> Parser<'a> {
             // Everything else is a primitive op named by its debug repr.
             _ => Ok(Op::Simple(format!("{:?}", tok.kind))),
         }
+    }
+}
+
+/// The name carried by an identifier token.
+fn ident_name(tok: Token) -> Result<String, ParseError> {
+    match tok.value {
+        Some(TokenValue::Ident(s)) if tok.kind == TokenKind::IDENT => Ok(s),
+        _ => Err(ParseError::ExpectedToken(TokenKind::IDENT, tok.loc)),
     }
 }
 

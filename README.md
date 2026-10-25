@@ -116,6 +116,10 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `y` | DEREF | Pop a pointer, push the value it points to |
 | `z` | SIZEOF | Pop a, push its size in bytes (`u64`) |
 | `z.T` | SIZEOF_TYPE | Push the size in bytes of type T |
+| `z.Name` | SIZEOF_AGG | Push the size in bytes of struct Name |
+| `r.Name{ .f .T ... }` | DECL | Define struct Name; each member is `.name` then a scalar type or an earlier struct |
+| `r.Name .obj` | DECL | Declare a struct object named obj |
+| `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
 ## Error handling
