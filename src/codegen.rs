@@ -50,11 +50,11 @@ impl Codegen {
         // find members by name. Members are emitted in definition order,
         // so a struct member's descriptor is always declared before use.
         for agg in &self.program.aggregates {
-            lines.push(format!("struct {} {{", self.agg_tag(&agg.name)));
+            lines.push(format!("{} {{", self.agg_type(&agg.name)));
             for field in &agg.fields {
                 let ty = match &field.ty {
                     TypeRef::Scalar(t) => t.c_type().to_string(),
-                    TypeRef::Aggregate(n) => format!("struct {}", self.agg_tag(n)),
+                    TypeRef::Aggregate(n) => self.agg_type(n),
                 };
                 lines.push(format!(
                     "    {} f_{};",
@@ -80,17 +80,17 @@ impl Codegen {
                     ),
                 };
                 lines.push(format!(
-                    "    {{\"{}\", offsetof(struct {}, f_{member}), {kind}, {pt}, {sub}}},",
+                    "    {{\"{}\", offsetof({}, f_{member}), {kind}, {pt}, {sub}}},",
                     field.name,
-                    self.agg_tag(&agg.name)
+                    self.agg_type(&agg.name)
                 ));
             }
             lines.push("};".to_string());
             lines.push(format!(
-                "const sg_agg {}_desc = {{\"{}\", sizeof(struct {}), {}, {}_fields}};",
+                "const sg_agg {}_desc = {{\"{}\", sizeof({}), {}, {}_fields}};",
                 self.agg_tag(&agg.name),
                 agg.name,
-                self.agg_tag(&agg.name),
+                self.agg_type(&agg.name),
                 agg.fields.len(),
                 self.agg_tag(&agg.name)
             ));
@@ -118,8 +118,8 @@ impl Codegen {
         }
         for object in &self.program.objects {
             lines.push(format!(
-                "struct {} var_{};",
-                self.agg_tag(&object.agg),
+                "{} var_{};",
+                self.agg_type(&object.agg),
                 self.c_ident(&TargetName::Named(object.name.clone()))
             ));
         }
@@ -228,9 +228,18 @@ impl Codegen {
             .map(|o| o.agg.as_str())
     }
 
-    /// The C struct tag for a sigi struct name.
+    /// The C identifier for a sigi struct or union name.
     fn agg_tag(&self, name: &str) -> String {
         format!("agg_{}", self.c_ident(&TargetName::Named(name.to_string())))
+    }
+
+    /// The full C type for a sigi struct or union name.
+    fn agg_type(&self, name: &str) -> String {
+        let keyword = match self.program.aggregates.iter().find(|a| a.name == name) {
+            Some(agg) if agg.is_union => "union",
+            _ => "struct",
+        };
+        format!("{keyword} {}", self.agg_tag(name))
     }
 
     /// C expression for a pointer to a named object, or to a variable cell.
@@ -282,8 +291,8 @@ impl Codegen {
                 ty.c_type()
             )),
             Op::SizeOfAgg(name) => lines.push(format!(
-                "{prefix}pushv(sg_from_bits(SG_U64, sizeof(struct {})));",
-                self.agg_tag(name)
+                "{prefix}pushv(sg_from_bits(SG_U64, sizeof({})));",
+                self.agg_type(name)
             )),
             Op::Member(name) => {
                 lines.push(format!("{prefix}pushv(sg_member(popv(), \"{name}\"));"))

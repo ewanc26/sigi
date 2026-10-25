@@ -209,8 +209,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no aggregate types; depends on the structs model"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_unions.si"
+          ]
         }
       }
     },

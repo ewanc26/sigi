@@ -1,0 +1,12 @@
+\\ Unions: every member starts at offset 0 and shares storage with the others.
+u.Bits{ .whole .u32 .low .u8 .wide .f64 }
+r .Bits .word
+z.Bits |
+!258 j.word n.whole :
+j.word n.low y |
+j.word n.whole y |
+!7 j.word n.low :
+j.word n.whole y |
+!3 j.word n.wide :
+j.word n.wide y |
+j.word n.whole y |

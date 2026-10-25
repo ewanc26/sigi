@@ -201,6 +201,8 @@ pub struct Field {
 pub struct AggregateDef {
     pub name: String,
     pub fields: Vec<Field>,
+    /// True for `u.Name{...}`: all members share storage.
+    pub is_union: bool,
 }
 
 /// A named struct object declared with `r .Name .obj`.  It is a C struct

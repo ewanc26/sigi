@@ -161,7 +161,7 @@ impl<'a> Parser<'a> {
                 self.parse_typedef()?;
                 continue;
             }
-            if self.peek()?.kind == TokenKind::DECL {
+            if matches!(self.peek()?.kind, TokenKind::DECL | TokenKind::UNION) {
                 self.parse_decl()?;
                 continue;
             }
@@ -354,14 +354,18 @@ impl<'a> Parser<'a> {
 
     // ─── Declarations ───────────────────────────────────────────
 
-    /// Parse a declaration that starts with `r`: a struct definition
-    /// `r.Name{ ... }` or an object declaration `r .Type .name`.
+    /// Parse a declaration that starts with `r` (struct) or `u` (union): a
+    /// definition `r.Name{ ... }` or an object declaration `r .Name .obj`.
     fn parse_decl(&mut self) -> Result<(), ParseError> {
-        self.consume(TokenKind::DECL)?;
+        let keyword = self.advance()?;
+        let is_union = keyword.kind == TokenKind::UNION;
         let first = self.advance()?;
         let first_name = ident_name(first.clone())?;
         if self.peek()?.kind == TokenKind::BLOCK {
-            return self.parse_struct(first_name, first.loc);
+            return self.parse_struct(first_name, first.loc, is_union);
+        }
+        if is_union {
+            return Err(ParseError::ExpectedToken(TokenKind::BLOCK, first.loc));
         }
         if !self.agg_index.contains_key(&first_name) {
             if self.resolve_type(&first_name).is_some() {
@@ -387,7 +391,12 @@ impl<'a> Parser<'a> {
 
     /// Parse the body of `r.Name{ .x .f64 .y .i32 }`. Each member is a name
     /// followed by a scalar type or a struct defined earlier.
-    fn parse_struct(&mut self, name: String, loc: SourceLocation) -> Result<(), ParseError> {
+    fn parse_struct(
+        &mut self,
+        name: String,
+        loc: SourceLocation,
+        is_union: bool,
+    ) -> Result<(), ParseError> {
         if self.agg_index.contains_key(&name)
             || NumType::from_name(&name).is_some()
             || self.typedefs.contains_key(&name)
@@ -419,7 +428,11 @@ impl<'a> Parser<'a> {
             return Err(ParseError::EmptyAggregate(name, loc));
         }
         self.agg_index.insert(name.clone(), self.aggregates.len());
-        self.aggregates.push(AggregateDef { name, fields });
+        self.aggregates.push(AggregateDef {
+            name,
+            fields,
+            is_union,
+        });
         Ok(())
     }
 
@@ -706,6 +719,7 @@ impl<'a> Parser<'a> {
             TokenKind::FfiDecl
             | TokenKind::ENUM
             | TokenKind::DECL
+            | TokenKind::UNION
             | TokenKind::CASE
             | TokenKind::DEFAULT => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
             TokenKind::FfiCall => {
