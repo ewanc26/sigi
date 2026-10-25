@@ -3,8 +3,8 @@
 int main(void) {
     printf("%g\n", (double)0xFF);
     printf("%g\n", (double)0X10);
-    printf("%g\n", (double)0b1011);
-    printf("%g\n", (double)0B11);
+    printf("%g\n", (double)11);
+    printf("%g\n", (double)3);
     printf("%g\n", (double)017);
     printf("%g\n", (double)0);
     printf("%g\n", (double)-0x10);
