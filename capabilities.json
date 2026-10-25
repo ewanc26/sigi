@@ -468,8 +468,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/control_do_while.si"
+          ]
         }
       }
     },
@@ -492,8 +494,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "not started"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/control_break_continue.si"
+          ]
         }
       }
     },

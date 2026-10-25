@@ -106,7 +106,7 @@ impl Codegen {
                 Op::Var(VarName::Named(name)) | Op::StoreNamed(name) => {
                     named_vars.insert(name.clone());
                 }
-                Op::While(body) | Op::Block(body) | Op::For(body) => {
+                Op::While(body) | Op::DoWhile(body) | Op::Block(body) | Op::For(body) => {
                     self.collect_vars(body, named_vars)
                 }
                 Op::IfElse {
@@ -192,6 +192,17 @@ impl Codegen {
                 lines.push(format!("{prefix}    }}"));
                 lines.push(format!("{prefix}}}"));
             }
+            Op::DoWhile(body) => {
+                // Body runs before the first check; the condition is the
+                // stack top, matching `[ ]`, and `continue` re-checks it.
+                lines.push(format!("{prefix}do {{"));
+                for op in body {
+                    lines.extend(self.codegen_op(op, indent + 1));
+                }
+                lines.push(format!("{prefix}}} while (sp > 0 && stack[sp - 1] != 0.0);"));
+            }
+            Op::Break => lines.push(format!("{prefix}break;")),
+            Op::Continue => lines.push(format!("{prefix}continue;")),
             Op::FfiCall(name) => {
                 let arity = self
                     .program

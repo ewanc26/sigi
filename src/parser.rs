@@ -26,6 +26,10 @@ pub enum ParseError {
     DuplicateForeign(String, SourceLocation),
     #[error("Foreign function {0} is not declared at {1:?}")]
     UndeclaredForeign(String, SourceLocation),
+    #[error("Break outside a loop at {0:?}")]
+    BreakOutsideLoop(SourceLocation),
+    #[error("Continue outside a loop at {0:?}")]
+    ContinueOutsideLoop(SourceLocation),
 }
 
 // ─── Parser ──────────────────────────────────────────────────────
@@ -38,6 +42,7 @@ pub enum ParseError {
 pub struct Parser<'a> {
     lexer: std::iter::Peekable<Lexer<'a>>,
     foreign: Vec<ForeignFn>,
+    loop_depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -45,6 +50,7 @@ impl<'a> Parser<'a> {
         Self {
             lexer: lexer.peekable(),
             foreign: Vec::new(),
+            loop_depth: 0,
         }
     }
 
@@ -188,6 +194,15 @@ impl<'a> Parser<'a> {
 
     // ─── Op Sequences ───────────────────────────────────────────
 
+    /// Parse the body of a `[ ]` or `d[ ]` loop, tracking loop depth so
+    /// `q` and `w` are only accepted inside a loop.
+    fn parse_loop_body(&mut self) -> Result<Vec<Op>, ParseError> {
+        self.loop_depth += 1;
+        let body = self.parse_ops();
+        self.loop_depth -= 1;
+        body
+    }
+
     fn parse_ops(&mut self) -> Result<Vec<Op>, ParseError> {
         let mut ops = Vec::new();
         while let Ok(tok) = self.peek() {
@@ -248,20 +263,45 @@ impl<'a> Parser<'a> {
                 self.consume(TokenKind::ENDCALL)?;
                 Ok(Op::Call(target))
             }
-            TokenKind::STRING => Ok(Op::String(if let Some(TokenValue::String(bytes)) = tok.value {
-                bytes
-            } else {
-                Vec::new()
-            })),
+            TokenKind::STRING => Ok(Op::String(
+                if let Some(TokenValue::String(bytes)) = tok.value {
+                    bytes
+                } else {
+                    Vec::new()
+                },
+            )),
             TokenKind::WHILE => {
-                let body = self.parse_ops()?;
+                let body = self.parse_loop_body()?;
                 self.consume(TokenKind::WEND)?;
                 Ok(Op::While(body))
             }
-            TokenKind::FOR => match self.parse_op()? {
-                Op::Block(body) => Ok(Op::For(body)),
-                _ => Err(ParseError::ExpectedToken(TokenKind::BLOCK, tok.loc)),
-            },
+            TokenKind::DO => {
+                self.consume(TokenKind::WHILE)?;
+                let body = self.parse_loop_body()?;
+                self.consume(TokenKind::WEND)?;
+                Ok(Op::DoWhile(body))
+            }
+            TokenKind::FOR => {
+                self.loop_depth += 1;
+                let op = self.parse_op();
+                self.loop_depth -= 1;
+                match op? {
+                    Op::Block(body) => Ok(Op::For(body)),
+                    _ => Err(ParseError::ExpectedToken(TokenKind::BLOCK, tok.loc)),
+                }
+            }
+            TokenKind::BREAK => {
+                if self.loop_depth == 0 {
+                    return Err(ParseError::BreakOutsideLoop(tok.loc));
+                }
+                Ok(Op::Break)
+            }
+            TokenKind::CONTINUE => {
+                if self.loop_depth == 0 {
+                    return Err(ParseError::ContinueOutsideLoop(tok.loc));
+                }
+                Ok(Op::Continue)
+            }
             TokenKind::FfiDecl => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
             TokenKind::FfiCall => {
                 let name_tok = self.advance()?;

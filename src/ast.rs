@@ -35,6 +35,12 @@ pub enum Op {
     While(Vec<Op>),
     /// Counted loop: pop count, run body that many times.
     For(Vec<Op>),
+    /// Do-while loop: run body, then repeat while stack top is nonzero.
+    DoWhile(Vec<Op>),
+    /// Leave the innermost loop.
+    Break,
+    /// Skip to the next iteration of the innermost loop.
+    Continue,
     /// Conditional: pop condition, execute one of two bodies.
     IfElse {
         then_body: Vec<Op>,
