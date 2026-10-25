@@ -38,6 +38,7 @@ Program Parser::parse(){
         if(t.kind=="RBRACK"){ op.kind=SOp::WhileEnd; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="LBRACE"){ op.kind=SOp::IfStart; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="RBRACE"){ op.kind=SOp::IfEnd; advance(); mainOps.push_back(op); continue; }
+        if(t.kind=="SEMI"){ op.kind=SOp::IfElse; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="CALLFUNC"){ op.kind=SOp::CallFunc; op.funcNum=(int)t.ival; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="CALLNAMED"){ op.kind=SOp::CallNamed; op.name=t.name; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="BREAK"){ op.kind=SOp::Break; advance(); mainOps.push_back(op); continue; }
@@ -54,6 +55,38 @@ Program Parser::parse(){
         if(t.kind=="N"){ op.kind=SOp::Atan2; advance(); mainOps.push_back(op); continue; }
         throw std::runtime_error("Unsupported token " + t.kind + " at line " +
                                  std::to_string(t.line) + ", column " + std::to_string(t.col));
+    }
+    struct ControlFrame { SOp::Kind kind; bool hasElse = false; };
+    std::vector<ControlFrame> controls;
+    for (const auto &op : mainOps) {
+        if (op.kind == SOp::WhileStart || op.kind == SOp::IfStart) {
+            controls.push_back({op.kind, false});
+        } else if (op.kind == SOp::WhileEnd) {
+            if (controls.empty() || controls.back().kind != SOp::WhileStart) {
+                throw std::runtime_error("unmatched ']' in control flow");
+            }
+            controls.pop_back();
+        } else if (op.kind == SOp::IfElse) {
+            if (controls.empty() || controls.back().kind != SOp::IfStart || controls.back().hasElse) {
+                throw std::runtime_error("';' must separate the two branches of an if-else block");
+            }
+            controls.back().hasElse = true;
+        } else if (op.kind == SOp::IfEnd) {
+            if (controls.empty() || controls.back().kind != SOp::IfStart) {
+                throw std::runtime_error("unmatched '}' in control flow");
+            }
+            controls.pop_back();
+        } else if (op.kind == SOp::Break) {
+            bool insideLoop = false;
+            for (auto frame = controls.rbegin(); frame != controls.rend(); ++frame) {
+                if (frame->kind == SOp::WhileStart) { insideLoop = true; break; }
+            }
+            if (!insideLoop) throw std::runtime_error("break used outside a loop");
+        }
+    }
+    if (!controls.empty()) {
+        throw std::runtime_error(controls.back().kind == SOp::WhileStart
+            ? "unterminated '[' loop" : "unterminated '{' conditional");
     }
     prog.mainOps = mainOps;
     return prog;
