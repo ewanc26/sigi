@@ -6,7 +6,7 @@ Guidance for AI coding agents working in **sigi**.
 
 
 
-- Language: Rust
+- Language: C++
 - Default branch: main
 
 ## Working rules

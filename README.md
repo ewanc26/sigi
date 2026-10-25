@@ -1,6 +1,6 @@
 # Sigi
 
-A pure symbolic stack language that compiles to C or runs in an interpreter.
+A pure symbolic stack language that compiles to C via a C++ compiler.
 
 **Character set:** `!@#$%^&*()-+=[]{}|;:'",.<>/?\~` plus digits `0-9`
 
