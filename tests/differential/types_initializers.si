@@ -1,0 +1,17 @@
+\\ Initializers: a brace list fills members in order; nested braces fill
+\\ struct members, and members past the end of the list are zeroed.
+r.Pt{ .x .f64 .y .i32 }
+r.Seg{ .a .Pt .b .Pt }
+r .Pt .origin = { !2.5 !7 }
+r .Seg .line = { { !1 !2 } { !3 } }
+r .Pt .zero = { }
+r .Pt .typed = { !2.5 !9l }
+j.origin n.x y |
+j.origin n.y y |
+j.line n.a n.x y |
+j.line n.a n.y y |
+j.line n.b n.x y |
+j.line n.b n.y y |
+j.zero n.x y |
+j.zero n.y y |
+j.typed n.y y |

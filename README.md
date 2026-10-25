@@ -119,6 +119,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `z.Name` | SIZEOF_AGG | Push the size in bytes of struct Name |
 | `r.Name{ .f .T ... }` | DECL | Define struct Name; each member is `.name` then a scalar type or an earlier struct |
 | `r.Name .obj` | DECL | Declare a struct object named obj |
+| `r.Name .obj = { ... }` | DECL | Declare a struct object, filling members in order from a brace list; nested braces fill struct members, and missing members are zeroed |
 | `u.Name{ .f .T ... }` | UNION | Define union Name; members share storage, each starting at offset 0 |
 | `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |

@@ -5,7 +5,7 @@
 //! Everything else is a single-token primitive.
 
 use crate::ast::{
-    walk_ops, AggregateDef, Field, ForeignFn, Function, NumType, ObjectDecl, Op, Program,
+    walk_ops, AggregateDef, Field, ForeignFn, Function, Init, NumType, ObjectDecl, Op, Program,
     SourceLocation, SwitchArm, TargetName, TypeRef, VarName,
 };
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
@@ -64,6 +64,8 @@ pub enum ParseError {
     DuplicateMember(String, SourceLocation),
     #[error("{0} is a struct and cannot be stored to directly at {1:?}")]
     NotAssignable(String, SourceLocation),
+    #[error("Too many initializers for {0} at {1:?}")]
+    TooManyInitializers(String, SourceLocation),
     #[error("Object {0} needs a struct type at {1:?}")]
     ObjectNeedsStruct(String, SourceLocation),
 }
@@ -381,12 +383,59 @@ impl<'a> Parser<'a> {
         {
             return Err(ParseError::DuplicateDefinition(name, name_tok.loc));
         }
+        let init = if self.peek()?.kind == TokenKind::EQ {
+            self.advance()?;
+            Some(self.parse_init(&first_name)?)
+        } else {
+            None
+        };
         self.objects.insert(name.clone(), first_name.clone());
         self.object_list.push(ObjectDecl {
             name,
             agg: first_name,
+            init,
         });
         Ok(())
+    }
+
+    /// Parse the brace list that initializes a struct object. Each element
+    /// fills the next member in order; members past the end of the list are
+    /// zeroed. A scalar member takes a number, a struct member takes a list.
+    fn parse_init(&mut self, agg: &str) -> Result<Init, ParseError> {
+        let open = self.advance()?;
+        if open.kind != TokenKind::BLOCK {
+            return Err(ParseError::ExpectedToken(TokenKind::BLOCK, open.loc));
+        }
+        let fields = self.aggregates[self.agg_index[agg]].fields.clone();
+        let mut values = Vec::new();
+        loop {
+            let tok = self.peek()?.clone();
+            if tok.kind == TokenKind::ENDB {
+                self.advance()?;
+                break;
+            }
+            let field = fields
+                .get(values.len())
+                .ok_or_else(|| ParseError::TooManyInitializers(agg.to_string(), tok.loc))?;
+            match &field.ty {
+                TypeRef::Scalar(_) => {
+                    let num = self.advance()?;
+                    let op = match num.value {
+                        Some(TokenValue::Int(value, ty)) if num.kind == TokenKind::NUM => {
+                            Op::PushInt { value, ty }
+                        }
+                        Some(TokenValue::Num(n)) if num.kind == TokenKind::NUM => Op::Push(n),
+                        _ => return Err(ParseError::ExpectedToken(TokenKind::NUM, num.loc)),
+                    };
+                    values.push(Init::Num(op));
+                }
+                TypeRef::Aggregate(sub) => {
+                    let sub = sub.clone();
+                    values.push(self.parse_init(&sub)?);
+                }
+            }
+        }
+        Ok(Init::List(values))
     }
 
     /// Parse the body of `r.Name{ .x .f64 .y .i32 }`. Each member is a name

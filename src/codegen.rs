@@ -4,7 +4,7 @@
 //! fixed stack array and runtime prelude.  The generated code is
 //! portable C99 and links against libm.
 
-use crate::ast::{walk_ops, Op, Program, TargetName, TypeRef, VarName};
+use crate::ast::{walk_ops, Init, Op, Program, TargetName, TypeRef, VarName};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct Codegen {
@@ -117,8 +117,12 @@ impl Codegen {
             ));
         }
         for object in &self.program.objects {
+            let init = match &object.init {
+                Some(Init::List(values)) => format!(" = {}", self.init_list(&object.agg, values)),
+                _ => String::new(),
+            };
             lines.push(format!(
-                "{} var_{};",
+                "{} var_{}{init};",
                 self.agg_type(&object.agg),
                 self.c_ident(&TargetName::Named(object.name.clone()))
             ));
@@ -231,6 +235,32 @@ impl Codegen {
     /// The C identifier for a sigi struct or union name.
     fn agg_tag(&self, name: &str) -> String {
         format!("agg_{}", self.c_ident(&TargetName::Named(name.to_string())))
+    }
+
+    /// A C brace initializer for a struct, from a list of its members in order.
+    /// Members past the end of the list are left out, so C zeroes them.
+    fn init_list(&self, agg: &str, values: &[Init]) -> String {
+        let fields = self
+            .program
+            .aggregates
+            .iter()
+            .find(|a| a.name == agg)
+            .map(|a| a.fields.clone())
+            .unwrap_or_default();
+        let parts: Vec<String> = values
+            .iter()
+            .zip(fields.iter())
+            .map(|(value, field)| {
+                let member = self.c_ident(&TargetName::Named(field.name.clone()));
+                let text = match (value, &field.ty) {
+                    (Init::Num(op), TypeRef::Scalar(t)) => num_text(op, t.c_type()),
+                    (Init::List(sub), TypeRef::Aggregate(name)) => self.init_list(name, sub),
+                    _ => String::new(),
+                };
+                format!(".f_{member} = {text}")
+            })
+            .collect();
+        format!("{{ {} }}", parts.join(", "))
     }
 
     /// The full C type for a sigi struct or union name.
@@ -506,5 +536,15 @@ impl Codegen {
             }
         }
         lines
+    }
+}
+
+/// A numeric literal converted to the C type of the member it initializes.
+fn num_text(op: &Op, c_type: &str) -> String {
+    match op {
+        Op::PushInt { value, .. } if *value >= 0 => format!("(({c_type}){value}ULL)"),
+        Op::PushInt { value, .. } => format!("(({c_type})({value}LL))"),
+        Op::Push(n) => format!("(({c_type})({n:?}))"),
+        _ => "0".to_string(),
     }
 }

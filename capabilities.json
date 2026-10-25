@@ -261,8 +261,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "only the array fill op exists; no brace initializer lists"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_initializers.si"
+          ]
         }
       }
     },

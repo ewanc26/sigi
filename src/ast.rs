@@ -205,12 +205,21 @@ pub struct AggregateDef {
     pub is_union: bool,
 }
 
-/// A named struct object declared with `r .Name .obj`.  It is a C struct
-/// variable of the named struct type.
+/// A constant initializer for a struct: a number for a scalar member, or a
+/// nested list for a struct member.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Init {
+    Num(Op),
+    List(Vec<Init>),
+}
+
+/// A named struct object declared with `r .Name .obj`, optionally with
+/// `= { ... }`.  It is a C struct variable of the named struct type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectDecl {
     pub name: String,
     pub agg: String,
+    pub init: Option<Init>,
 }
 
 /// Reference to a variable slot.
