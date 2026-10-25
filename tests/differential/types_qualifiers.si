@@ -1,0 +1,10 @@
+\\ Storage qualifiers: .static is the file-scope default, .const objects are read-only.
+r .static .i32 .count = !3
+r .const .f64 .limit = !2.5
+.count |
+!4 :.count
+.count |
+.limit |
+.count .limit + |
+!9 j.limit :
+.limit |

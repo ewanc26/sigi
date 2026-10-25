@@ -123,6 +123,7 @@ The REPL (`sigic` with no arguments, or `--repl`) and `--interpret` are not impl
 | `u.Name{ .f .T ... }` | UNION | Define union Name; members share storage, each starting at offset 0 |
 | `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
 | `r .T [ !N ... ] .name` | DECL | Declare an array of scalar or struct type T with the given extents (one or more, after the type). A multi-dimensional array decays to a pointer to its rows. `+`/`-` on a pointer step by the size of what it addresses, so for a row pointer one step is a whole row |
+| `r .static .T .name` / `r .const .T .name` | DECL | `.static` is the file-scope default (accepted for explicitness); `.const` objects cannot be assigned with `:.name`, and a store through a pointer to one (`j.name` or a member pointer) exits 1 at run time. Qualifiers go before the type, and only on objects, not on struct definitions |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
 ## Error handling

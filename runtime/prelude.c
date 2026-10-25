@@ -63,6 +63,7 @@ typedef struct {
     sg_pk ekind;          /* leaf kind of an SG_PK_ARRAY: SCALAR or AGG */
     const size_t *dims;   /* SG_PK_ARRAY: the extents of the array addressed */
     int nd;               /* number of entries in dims */
+    int ro;               /* addresses a `.const` object: stores are rejected */
 } sg_ptr;
 
 typedef struct {
@@ -357,7 +358,13 @@ static sv sg_ptr_value(void *addr, sg_pk kind, sg_ty pt, const sg_agg *agg) {
     r.v.ptr.ekind = kind;
     r.v.ptr.dims = NULL;
     r.v.ptr.nd = 0;
+    r.v.ptr.ro = 0;
     return r;
+}
+
+static sv sg_const_ptr(sv p) {
+    p.v.ptr.ro = 1;
+    return p;
 }
 
 static sv sg_ptr_to(sv *cell) { return sg_ptr_value(cell, SG_PK_CELL, SG_F64, NULL); }
@@ -461,13 +468,16 @@ static void sg_write_scalar(void *addr, sg_ty t, sv val) {
 static sv sg_deref(sv p) {
     if (p.t != SG_PTR) sg_fail("Dereference of a non-pointer");
     const sg_ptr *q = &p.v.ptr;
+    sv r = p;
     switch (q->kind) {
     case SG_PK_CELL: return *(sv *)q->addr;
     case SG_PK_SCALAR: return sg_read_scalar(q->addr, q->pt);
     case SG_PK_ARRAY:
         /* An array decays: its first element is a row, or a leaf for one dimension. */
-        if (q->nd > 1) return sg_array_ptr(q->addr, q->ekind, q->pt, q->agg, q->dims + 1, q->nd - 1);
-        return sg_ptr_value(q->addr, q->ekind, q->pt, q->agg);
+        if (q->nd > 1) r = sg_array_ptr(q->addr, q->ekind, q->pt, q->agg, q->dims + 1, q->nd - 1);
+        else r = sg_ptr_value(q->addr, q->ekind, q->pt, q->agg);
+        r.v.ptr.ro = q->ro;
+        return r;
     default: sg_fail("A struct has no single value; load a member");
     }
     return p;
@@ -475,6 +485,7 @@ static sv sg_deref(sv p) {
 
 static void sg_store_ptr(sv p, sv val) {
     if (p.t != SG_PTR) sg_fail("Store through a non-pointer");
+    if (p.v.ptr.ro) sg_fail("Store through a pointer to a const object");
     switch (p.v.ptr.kind) {
     case SG_PK_CELL: *(sv *)p.v.ptr.addr = val; return;
     case SG_PK_SCALAR: sg_write_scalar(p.v.ptr.addr, p.v.ptr.pt, val); return;
@@ -489,7 +500,9 @@ static sv sg_member(sv p, const char *name) {
     for (int i = 0; i < a->nfields; i++) {
         const sg_field *f = &a->fields[i];
         if (strcmp(f->name, name) == 0) {
-            return sg_ptr_value((char *)p.v.ptr.addr + f->off, f->kind, f->pt, f->agg);
+            sv r = sg_ptr_value((char *)p.v.ptr.addr + f->off, f->kind, f->pt, f->agg);
+            r.v.ptr.ro = p.v.ptr.ro;
+            return r;
         }
     }
     sg_fail("No such struct member");

@@ -72,6 +72,8 @@ pub enum ParseError {
     TooManyInitializers(String, SourceLocation),
     #[error("Object {0} needs a struct type at {1:?}")]
     ObjectNeedsStruct(String, SourceLocation),
+    #[error("Qualifier {0} is not allowed here at {1:?}")]
+    BadQualifier(String, SourceLocation),
 }
 
 // ─── Parser ──────────────────────────────────────────────────────
@@ -367,9 +369,28 @@ impl<'a> Parser<'a> {
     fn parse_decl(&mut self) -> Result<(), ParseError> {
         let keyword = self.advance()?;
         let is_union = keyword.kind == TokenKind::UNION;
-        let first = self.advance()?;
-        let first_name = ident_name(first.clone())?;
+        // Storage qualifiers come before the type: `.const` (no stores) and
+        // `.static` (the file-scope default, accepted for explicitness).
+        let mut is_const = false;
+        let mut is_static = false;
+        let mut first = self.advance()?;
+        let mut first_name = ident_name(first.clone())?;
+        while first_name == "const" || first_name == "static" {
+            if is_union {
+                return Err(ParseError::BadQualifier(first_name, first.loc));
+            }
+            let seen = if first_name == "const" { &mut is_const } else { &mut is_static };
+            if *seen {
+                return Err(ParseError::BadQualifier(first_name, first.loc));
+            }
+            *seen = true;
+            first = self.advance()?;
+            first_name = ident_name(first.clone())?;
+        }
         if self.peek()?.kind == TokenKind::BLOCK {
+            if is_const || is_static {
+                return Err(ParseError::BadQualifier(first_name, first.loc));
+            }
             return self.parse_struct(first_name, first.loc, is_union);
         }
         if is_union {
@@ -407,13 +428,14 @@ impl<'a> Parser<'a> {
             None
         };
         // Only a plain scalar object is assigned with `:.name`.
-        let assignable = dims.is_empty() && matches!(elem, TypeRef::Scalar(_));
+        let assignable = dims.is_empty() && !is_const && matches!(elem, TypeRef::Scalar(_));
         self.objects.insert(name.clone(), assignable);
         self.object_list.push(ObjectDecl {
             name,
             elem,
             dims,
             init,
+            is_const,
         });
         Ok(())
     }

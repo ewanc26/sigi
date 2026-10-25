@@ -222,6 +222,8 @@ pub struct ObjectDecl {
     /// Array dimensions, outermost first; empty for a single object.
     pub dims: Vec<u64>,
     pub init: Option<Init>,
+    /// Declared `.const`: the object cannot be stored to, directly or through a pointer.
+    pub is_const: bool,
 }
 
 /// Reference to a variable slot.

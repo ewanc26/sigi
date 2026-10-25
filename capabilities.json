@@ -313,8 +313,10 @@
           "note": "not started"
         },
         "sigi": {
-          "status": "missing",
-          "note": "no const, volatile, or static storage qualifiers"
+          "status": "implemented",
+          "tests": [
+            "tests/differential/types_qualifiers.si"
+          ]
         }
       }
     },

@@ -136,7 +136,7 @@ impl Codegen {
                 }
                 _ => String::new(),
             };
-            lines.push(format!("{ctype} var_{var}{extents}{init};"));
+            lines.push(format!("static {ctype} var_{var}{extents}{init};"));
         }
 
         // ─── Forward Declarations ────────────────────────────────
@@ -307,7 +307,7 @@ impl Codegen {
                 format!("&{}_desc", self.agg_tag(a)),
             ),
         };
-        if object.dims.len() > 1 {
+        let ptr = if object.dims.len() > 1 {
             format!(
                 "sg_array_ptr(&{var}, {ekind}, {pt}, {agg}, dims_{} + 1, {})",
                 self.c_ident(&TargetName::Named(name.to_string())),
@@ -315,6 +315,11 @@ impl Codegen {
             )
         } else {
             format!("sg_ptr_value(&{var}, {ekind}, {pt}, {agg})")
+        };
+        if object.is_const {
+            format!("sg_const_ptr({ptr})")
+        } else {
+            ptr
         }
     }
 
