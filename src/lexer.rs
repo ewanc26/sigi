@@ -4,7 +4,7 @@
 //! keywords.  Identifiers and store-targets use `.` and `:.` prefixes.
 //! The lexer also strips C-style block comments and line comments (`\`).
 
-use crate::ast::SourceLocation;
+use crate::ast::{NumType, SourceLocation};
 use std::iter::Peekable;
 use std::str::Chars;
 use thiserror::Error;
@@ -128,6 +128,9 @@ pub enum TokenKind {
     CALLPTR,
     FfiDecl,
     FfiCall,
+    CAST,
+    SIZEOF,
+    TYPEDEF,
     EOF,
 }
 
@@ -143,6 +146,8 @@ pub struct Token {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenValue {
     Num(f64),
+    /// A suffixed integer constant, carrying its exact value and type.
+    Int(i128, NumType),
     Var(usize),
     Ident(String),
     Char(u8),
@@ -468,6 +473,9 @@ impl<'a> Lexer<'a> {
     }
 
     /// Finish an integer constant: read its optional suffix and build the token.
+    /// Unsuffixed constants stay untyped doubles. A `u` suffix gives `u32`
+    /// (or `u64` when the value does not fit), `l`/`ll` give `i64`, and
+    /// `ul`/`ull` give `u64`.
     fn integer_token(
         &mut self,
         magnitude: u64,
@@ -493,11 +501,34 @@ impl<'a> Lexer<'a> {
             // `-n` with an unsigned suffix wraps in C; sigi does not model that.
             return Err(LexError::InvalidSuffix(loc));
         }
-        let value = magnitude as f64;
-        let value = if negative { -value } else { value };
+        let signed = if negative {
+            -(magnitude as i128)
+        } else {
+            magnitude as i128
+        };
+        if suffix.is_empty() {
+            return Ok(Token {
+                kind: TokenKind::NUM,
+                value: Some(TokenValue::Num(signed as f64)),
+                loc,
+            });
+        }
+        let unsigned = suffix.contains(['u', 'U']);
+        let ty = if unsigned {
+            if magnitude <= u32::MAX as u64 && !suffix.contains(['l', 'L']) {
+                NumType::U32
+            } else {
+                NumType::U64
+            }
+        } else {
+            if signed < i64::MIN as i128 || signed > i64::MAX as i128 {
+                return Err(LexError::IntegerOutOfRange(loc));
+            }
+            NumType::I64
+        };
         Ok(Token {
             kind: TokenKind::NUM,
-            value: Some(TokenValue::Num(value)),
+            value: Some(TokenValue::Int(signed, ty)),
             loc,
         })
     }
@@ -637,6 +668,9 @@ impl<'a> Lexer<'a> {
             'p' => TokenKind::CALLPTR,
             'x' => TokenKind::FfiDecl,
             'c' => TokenKind::FfiCall,
+            'i' => TokenKind::CAST,
+            'z' => TokenKind::SIZEOF,
+            't' => TokenKind::TYPEDEF,
             _ => return Err(LexError::UnexpectedCharacter(ch, loc)),
         };
         Ok(Token {

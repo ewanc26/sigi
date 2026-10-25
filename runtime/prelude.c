@@ -3,7 +3,7 @@
  * Stack-based runtime for compiled sigi programs.  Included verbatim
  * at the top of every generated C file.
  *
- * Stack: fixed-size array with overflow/underflow guards.
+ * Stack: fixed-size array of typed values with overflow/underflow guards.
  * Arrays: dynamically allocated, tracked by ID.
  * Variables: 100 indexed slots for numbered vars.
  */
@@ -17,9 +17,198 @@
 #define STACK_SIZE 1000
 #define MAX_ARRAYS 10
 
-static double stack[STACK_SIZE];
+/* ── Typed Values ──────────────────────────────────────────────────
+ * Each stack slot and variable carries a numeric type.  Untyped numbers
+ * (`!5`, `!2.5`) are SG_F64.  Integers are stored sign-extended in `s`
+ * (signed types) or zero-extended in `u` (unsigned types).  Float types
+ * keep their value in `d`, already rounded to float for SG_F32.
+ * Conversions and the usual arithmetic conversions follow C.
+ */
+
+typedef enum { SG_F64, SG_F32, SG_I8, SG_U8, SG_I16, SG_U16, SG_I32, SG_U32, SG_I64, SG_U64 } sg_ty;
+typedef enum { SG_OP_ADD, SG_OP_SUB, SG_OP_MUL, SG_OP_DIV, SG_OP_MOD } sg_op;
+typedef enum { SG_REL_EQ, SG_REL_LT, SG_REL_GT } sg_relop;
+
+typedef struct {
+    sg_ty t;
+    union { double d; long long s; unsigned long long u; } v;
+} sv;
+
+static void sg_fail(const char *msg) { fprintf(stderr, "%s\n", msg); exit(1); }
+
+static int sg_is_float(sg_ty t) { return t == SG_F64 || t == SG_F32; }
+
+static int sg_is_signed(sg_ty t) { return t == SG_I8 || t == SG_I16 || t == SG_I32 || t == SG_I64; }
+
+static int sg_width(sg_ty t) {
+    switch (t) {
+    case SG_I8: case SG_U8: return 8;
+    case SG_I16: case SG_U16: return 16;
+    case SG_I32: case SG_U32: return 32;
+    default: return 64;
+    }
+}
+
+static unsigned long long sg_size(sg_ty t) {
+    switch (t) {
+    case SG_F32: return 4;
+    case SG_I8: case SG_U8: return 1;
+    case SG_I16: case SG_U16: return 2;
+    case SG_I32: case SG_U32: return 4;
+    default: return 8;
+    }
+}
+
+/* Build an integer of type t from its two's-complement bits, wrapping to its width. */
+static sv sg_from_bits(sg_ty t, unsigned long long bits) {
+    int n = sg_width(t);
+    unsigned long long mask = n == 64 ? ~0ULL : ((1ULL << n) - 1);
+    sv r;
+    r.t = t;
+    bits &= mask;
+    if (sg_is_signed(t)) {
+        if (bits >> (n - 1)) r.v.s = -(long long)((~bits) & mask) - 1;
+        else r.v.s = (long long)bits;
+    } else {
+        r.v.u = bits;
+    }
+    return r;
+}
+
+/* Two's-complement bits of an integer value. */
+static unsigned long long sg_bits_of(sv x) {
+    return sg_is_signed(x.t) ? (unsigned long long)x.v.s : x.v.u;
+}
+
+/* Convert a value to type `to`.  Integer-to-integer conversions wrap; a
+ * float outside the target range is an error (C leaves it undefined). */
+static sv sg_cast(sv x, sg_ty to) {
+    sv r;
+    r.t = to;
+    if (to == SG_F64) {
+        r.v.d = sg_is_float(x.t) ? x.v.d : sg_is_signed(x.t) ? (double)x.v.s : (double)x.v.u;
+        return r;
+    }
+    if (to == SG_F32) {
+        if (sg_is_float(x.t)) r.v.d = (float)x.v.d;
+        else if (sg_is_signed(x.t)) r.v.d = (float)x.v.s;
+        else r.v.d = (float)x.v.u;
+        return r;
+    }
+    if (sg_is_float(x.t)) {
+        double t = trunc(x.v.d);
+        int n = sg_width(to);
+        if (sg_is_signed(to)) {
+            double lim = ldexp(1.0, n - 1);
+            if (!(t >= -lim && t < lim)) sg_fail("Conversion out of range");
+            return sg_from_bits(to, (unsigned long long)(long long)t);
+        }
+        if (!(t >= 0.0 && t < ldexp(1.0, n))) sg_fail("Conversion out of range");
+        return sg_from_bits(to, (unsigned long long)t);
+    }
+    return sg_from_bits(to, sg_bits_of(x));
+}
+
+static double sg_to_double(sv x) { return sg_cast(x, SG_F64).v.d; }
+
+static long long sg_as_ll(sv x) {
+    return sg_is_float(x.t) ? (long long)x.v.d : (long long)sg_bits_of(x);
+}
+
+static int sg_truthy(sv x) { return sg_is_float(x.t) ? x.v.d != 0.0 : sg_bits_of(x) != 0; }
+
+static sg_ty sg_promote(sg_ty t) {
+    return (t == SG_I8 || t == SG_U8 || t == SG_I16 || t == SG_U16) ? SG_I32 : t;
+}
+
+/* The common type of a binary operation (C's usual arithmetic conversions). */
+static sg_ty sg_common(sg_ty a, sg_ty b) {
+    if (a == SG_F64 || b == SG_F64) return SG_F64;
+    if (a == SG_F32 || b == SG_F32) return SG_F32;
+    a = sg_promote(a);
+    b = sg_promote(b);
+    if (a == SG_U64 || b == SG_U64) return SG_U64;
+    if (a == SG_I64 || b == SG_I64) return SG_I64;
+    if (a == SG_U32 || b == SG_U32) return SG_U32;
+    return SG_I32;
+}
+
+/* Arithmetic in the common type.  Integer overflow wraps (C leaves it
+ * undefined); integer division by zero is an error. */
+static sv sg_arith(sg_op op, sv a, sv b) {
+    sg_ty t = sg_common(a.t, b.t);
+    sv x = sg_cast(a, t), y = sg_cast(b, t), r;
+    r.t = t;
+    if (t == SG_F64) {
+        double p = x.v.d, q = y.v.d;
+        switch (op) {
+        case SG_OP_ADD: r.v.d = p + q; break;
+        case SG_OP_SUB: r.v.d = p - q; break;
+        case SG_OP_MUL: r.v.d = p * q; break;
+        case SG_OP_DIV: r.v.d = p / q; break;
+        case SG_OP_MOD: r.v.d = fmod(p, q); break;
+        }
+        return r;
+    }
+    if (t == SG_F32) {
+        float p = (float)x.v.d, q = (float)y.v.d, out = 0.0f;
+        switch (op) {
+        case SG_OP_ADD: out = p + q; break;
+        case SG_OP_SUB: out = p - q; break;
+        case SG_OP_MUL: out = p * q; break;
+        case SG_OP_DIV: out = p / q; break;
+        case SG_OP_MOD: out = fmodf(p, q); break;
+        }
+        r.v.d = (double)out;
+        return r;
+    }
+    unsigned long long p = sg_bits_of(x), q = sg_bits_of(y);
+    switch (op) {
+    case SG_OP_ADD: return sg_from_bits(t, p + q);
+    case SG_OP_SUB: return sg_from_bits(t, p - q);
+    case SG_OP_MUL: return sg_from_bits(t, p * q);
+    default: break;
+    }
+    if (q == 0) sg_fail("Division by zero");
+    if (sg_is_signed(t)) {
+        long long sp = x.v.s, sq = y.v.s;
+        if (sq == -1) return sg_from_bits(t, op == SG_OP_DIV ? 0ULL - p : 0ULL);
+        return sg_from_bits(t, (unsigned long long)(op == SG_OP_DIV ? sp / sq : sp % sq));
+    }
+    return sg_from_bits(t, op == SG_OP_DIV ? p / q : p % q);
+}
+
+/* Relational test in the common type.  Unordered floats (NaN) compare false. */
+static int sg_rel(sg_relop op, sv a, sv b) {
+    sg_ty t = sg_common(a.t, b.t);
+    sv x = sg_cast(a, t), y = sg_cast(b, t);
+    int cmp;
+    if (sg_is_float(t)) {
+        if (x.v.d == y.v.d) cmp = 0;
+        else if (x.v.d < y.v.d) cmp = -1;
+        else if (x.v.d > y.v.d) cmp = 1;
+        else return 0;
+    } else if (sg_is_signed(t)) {
+        cmp = (x.v.s > y.v.s) - (x.v.s < y.v.s);
+    } else {
+        cmp = (x.v.u > y.v.u) - (x.v.u < y.v.u);
+    }
+    switch (op) {
+    case SG_REL_EQ: return cmp == 0;
+    case SG_REL_LT: return cmp < 0;
+    default: return cmp > 0;
+    }
+}
+
+static void sg_print(sv x) {
+    if (sg_is_float(x.t)) printf("%g\n", x.v.d);
+    else if (sg_is_signed(x.t)) printf("%lld\n", x.v.s);
+    else printf("%llu\n", x.v.u);
+}
+
+static sv stack[STACK_SIZE];
 static int sp = 0;
-static double vars[100];
+static sv vars[100];
 static double *arrays[MAX_ARRAYS];
 static int array_sizes[MAX_ARRAYS];
 
@@ -51,12 +240,25 @@ static int shift_count(double n) {
 
 /* ── Stack Operations ──────────────────────────────────────────── */
 
-static void push(double x) {
+static void pushv(sv x) {
     if (sp >= STACK_SIZE) { fprintf(stderr, "Stack overflow\n"); exit(1); }
     stack[sp++] = x;
 }
 
-static double pop(void) {
+/* Push an untyped number. */
+static void push(double x) {
+    sv v;
+    v.t = SG_F64;
+    v.v.d = x;
+    pushv(v);
+}
+
+static sv popv(void) {
     if (sp <= 0) { fprintf(stderr, "Stack underflow\n"); exit(1); }
     return stack[--sp];
+}
+
+/* Pop as a double, for operations that work on doubles. */
+static double pop(void) {
+    return sg_to_double(popv());
 }

@@ -5,7 +5,8 @@
 //! Everything else is a single-token primitive.
 
 use crate::ast::{
-    walk_ops, ForeignFn, Function, Op, Program, SourceLocation, SwitchArm, TargetName, VarName,
+    walk_ops, ForeignFn, Function, NumType, Op, Program, SourceLocation, SwitchArm, TargetName,
+    VarName,
 };
 use crate::lexer::{Lexer, Token, TokenKind, TokenValue};
 use std::collections::{HashMap, HashSet};
@@ -51,6 +52,10 @@ pub enum ParseError {
     UndefinedLabel(String),
     #[error("Function {0:?} is referenced but not defined")]
     UndefinedFunction(TargetName),
+    #[error("Unknown type {0} at {1:?}")]
+    UnknownType(String, SourceLocation),
+    #[error("Type name {0} is already defined at {1:?}")]
+    DuplicateTypedef(String, SourceLocation),
 }
 
 // ─── Parser ──────────────────────────────────────────────────────
@@ -68,6 +73,7 @@ pub struct Parser<'a> {
     enum_consts: HashMap<String, i64>,
     named_refs: HashSet<String>,
     fn_names: HashSet<String>,
+    typedefs: HashMap<String, NumType>,
 }
 
 impl<'a> Parser<'a> {
@@ -80,6 +86,7 @@ impl<'a> Parser<'a> {
             enum_consts: HashMap::new(),
             named_refs: HashSet::new(),
             fn_names: HashSet::new(),
+            typedefs: HashMap::new(),
         }
     }
 
@@ -130,6 +137,10 @@ impl<'a> Parser<'a> {
             }
             if self.peek()?.kind == TokenKind::ENUM {
                 self.parse_enum()?;
+                continue;
+            }
+            if self.peek()?.kind == TokenKind::TYPEDEF {
+                self.parse_typedef()?;
                 continue;
             }
             let tok = self.peek()?;
@@ -190,12 +201,8 @@ impl<'a> Parser<'a> {
             _ => return Err(ParseError::ExpectedToken(TokenKind::IDENT, name_tok.loc)),
         };
         let arity_tok = self.advance()?;
-        let arity = match arity_tok.value {
-            Some(TokenValue::Num(n))
-                if n.fract() == 0.0 && (0.0..=MAX_FOREIGN_ARITY as f64).contains(&n) =>
-            {
-                n as usize
-            }
+        let arity = match integer_literal(&arity_tok) {
+            Some(n) if (0..=MAX_FOREIGN_ARITY as i128).contains(&n) => n as usize,
             _ => return Err(ParseError::InvalidArity(arity_tok.loc)),
         };
         if self.foreign.iter().any(|f| f.name == name) {
@@ -235,12 +242,8 @@ impl<'a> Parser<'a> {
                     let mut value = next;
                     if self.peek()?.kind == TokenKind::NUM {
                         let num = self.advance()?;
-                        value = match num.value {
-                            Some(TokenValue::Num(n))
-                                if n.fract() == 0.0
-                                    && n >= i32::MIN as f64
-                                    && n <= i32::MAX as f64 =>
-                            {
+                        value = match integer_literal(&num) {
+                            Some(n) if (i32::MIN as i128..=i32::MAX as i128).contains(&n) => {
                                 n as i64
                             }
                             _ => return Err(ParseError::InvalidEnumValue(num.loc)),
@@ -253,6 +256,56 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(())
+    }
+
+    // ─── Typedefs ───────────────────────────────────────────────
+
+    /// Parse `t.Name .type`, naming a scalar type. The alias is global and
+    /// is used after `i.` and `z.` like a built-in type name.
+    fn parse_typedef(&mut self) -> Result<(), ParseError> {
+        self.consume(TokenKind::TYPEDEF)?;
+        let name_tok = self.advance()?;
+        let name = match name_tok.value {
+            Some(TokenValue::Ident(s)) => s,
+            _ => return Err(ParseError::ExpectedToken(TokenKind::IDENT, name_tok.loc)),
+        };
+        if NumType::from_name(&name).is_some() || self.typedefs.contains_key(&name) {
+            return Err(ParseError::DuplicateTypedef(name, name_tok.loc));
+        }
+        let ty = self.parse_type_name()?;
+        self.typedefs.insert(name, ty);
+        Ok(())
+    }
+
+    /// Parse one type name: a built-in such as `.u8` or a typedef alias.
+    fn parse_type_name(&mut self) -> Result<NumType, ParseError> {
+        let tok = self.advance()?;
+        match &tok.value {
+            Some(TokenValue::Ident(name)) => self
+                .resolve_type(name)
+                .ok_or_else(|| ParseError::UnknownType(name.clone(), tok.loc)),
+            _ => Err(ParseError::ExpectedToken(TokenKind::IDENT, tok.loc)),
+        }
+    }
+
+    fn resolve_type(&self, name: &str) -> Option<NumType> {
+        self.typedefs
+            .get(name)
+            .copied()
+            .or_else(|| NumType::from_name(name))
+    }
+
+    /// The type named by the next token, if it is a type name. Does not consume it.
+    fn peek_type_name(&mut self) -> Option<NumType> {
+        let name = match self.lexer.peek() {
+            Some(Ok(Token {
+                kind: TokenKind::IDENT,
+                value: Some(TokenValue::Ident(name)),
+                ..
+            })) => name.clone(),
+            _ => return None,
+        };
+        self.resolve_type(&name)
     }
 
     // ─── Functions ──────────────────────────────────────────────
@@ -320,12 +373,8 @@ impl<'a> Parser<'a> {
                 TokenKind::ENDB => break,
                 TokenKind::CASE => {
                     let num = self.advance()?;
-                    let value = match num.value {
-                        Some(TokenValue::Num(n))
-                            if num.kind == TokenKind::NUM
-                                && n.fract() == 0.0
-                                && n.abs() < 9_007_199_254_740_992.0 =>
-                        {
+                    let value = match integer_literal(&num) {
+                        Some(n) if num.kind == TokenKind::NUM && i64::try_from(n).is_ok() => {
                             n as i64
                         }
                         _ => return Err(ParseError::InvalidCaseValue(num.loc)),
@@ -384,11 +433,24 @@ impl<'a> Parser<'a> {
     fn parse_op(&mut self) -> Result<Op, ParseError> {
         let tok = self.advance()?;
         match tok.kind {
-            TokenKind::NUM => Ok(Op::Push(if let Some(TokenValue::Num(n)) = tok.value {
-                n
-            } else {
-                0.0
-            })),
+            TokenKind::NUM => match tok.value {
+                Some(TokenValue::Int(value, ty)) => Ok(Op::PushInt { value, ty }),
+                Some(TokenValue::Num(n)) => Ok(Op::Push(n)),
+                _ => Ok(Op::Push(0.0)),
+            },
+            TokenKind::CAST => Ok(Op::Cast(self.parse_type_name()?)),
+            TokenKind::SIZEOF => match self.peek_type_name() {
+                Some(ty) => {
+                    // `z.T` is the size of a type; a bare `z` measures the top value.
+                    self.advance()?;
+                    Ok(Op::PushInt {
+                        value: ty.size() as i128,
+                        ty: NumType::U64,
+                    })
+                }
+                None => Ok(Op::SizeOf),
+            },
+            TokenKind::TYPEDEF => Err(ParseError::UnexpectedToken(tok.kind, tok.loc)),
             TokenKind::CHAR => Ok(Op::Char(if let Some(TokenValue::Char(c)) = tok.value {
                 c
             } else {
@@ -537,6 +599,17 @@ impl<'a> Parser<'a> {
             // Everything else is a primitive op named by its debug repr.
             _ => Ok(Op::Simple(format!("{:?}", tok.kind))),
         }
+    }
+}
+
+/// The whole-number value of a numeric literal token, if it has one.
+fn integer_literal(tok: &Token) -> Option<i128> {
+    match tok.value {
+        Some(TokenValue::Num(n)) if n.fract() == 0.0 && n.abs() < 9_007_199_254_740_992.0 => {
+            Some(n as i128)
+        }
+        Some(TokenValue::Int(value, _)) => Some(value),
+        _ => None,
     }
 }
 

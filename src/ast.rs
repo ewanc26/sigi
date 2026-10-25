@@ -11,14 +11,83 @@ pub struct SourceLocation {
     pub col: usize,
 }
 
+/// The numeric type of a typed value.
+///
+/// Untyped numbers (`!5`, `!2.5`) are `F64`. Suffixed integer literals,
+/// `i.T` casts and typed variables carry the other types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumType {
+    F64,
+    F32,
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    U32,
+    I64,
+    U64,
+}
+
+impl NumType {
+    /// Look up a type name written after `i.` (cast), `z.` (sizeof) or `t.` (typedef).
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "f64" => Self::F64,
+            "f32" => Self::F32,
+            "i8" => Self::I8,
+            "u8" => Self::U8,
+            "i16" => Self::I16,
+            "u16" => Self::U16,
+            "i32" => Self::I32,
+            "u32" => Self::U32,
+            "i64" => Self::I64,
+            "u64" => Self::U64,
+            _ => return None,
+        })
+    }
+
+    /// Size in bytes, matching C on LP64 targets.
+    pub fn size(self) -> u64 {
+        match self {
+            Self::I8 | Self::U8 => 1,
+            Self::I16 | Self::U16 => 2,
+            Self::F32 | Self::I32 | Self::U32 => 4,
+            Self::F64 | Self::I64 | Self::U64 => 8,
+        }
+    }
+
+    /// The enumerator for this type in the runtime prelude.
+    pub fn c_tag(self) -> &'static str {
+        match self {
+            Self::F64 => "SG_F64",
+            Self::F32 => "SG_F32",
+            Self::I8 => "SG_I8",
+            Self::U8 => "SG_U8",
+            Self::I16 => "SG_I16",
+            Self::U16 => "SG_U16",
+            Self::I32 => "SG_I32",
+            Self::U32 => "SG_U32",
+            Self::I64 => "SG_I64",
+            Self::U64 => "SG_U64",
+        }
+    }
+}
+
 /// A single operation in the sigi IR.
 ///
 /// Most tokens lower to `Simple(kind)`.  Compound constructs (blocks,
 /// loops, conditionals) carry child op vectors.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
-    /// Push a numeric literal onto the stack.
+    /// Push an untyped numeric literal onto the stack.
     Push(f64),
+    /// Push a typed integer literal, written with a suffix such as `!5u`.
+    PushInt { value: i128, ty: NumType },
+    /// Pop a value and convert it to a type, written `i.T`.
+    Cast(NumType),
+    /// Pop a value and push its size in bytes, written `z`.
+    SizeOf,
     /// Push the value of a variable (indexed or named).
     Var(VarName),
     /// Call a function by index or name.

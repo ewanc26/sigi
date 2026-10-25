@@ -57,7 +57,7 @@ impl Codegen {
 
         for name in sorted_vars {
             lines.push(format!(
-                "static double var_{} = 0;",
+                "static sv var_{} = {{0}};",
                 self.c_ident(&TargetName::Named(name))
             ));
         }
@@ -170,17 +170,29 @@ impl Codegen {
             Op::Push(val) => {
                 lines.push(format!("{}push({});", prefix, val));
             }
+            Op::PushInt { value, ty } => {
+                // Two's-complement bits; sg_from_bits wraps them to the type's width.
+                lines.push(format!(
+                    "{prefix}pushv(sg_from_bits({}, {:#x}ULL));",
+                    ty.c_tag(),
+                    *value as u64
+                ));
+            }
+            Op::Cast(ty) => lines.push(format!("{prefix}pushv(sg_cast(popv(), {}));", ty.c_tag())),
+            Op::SizeOf => lines.push(format!(
+                "{prefix}pushv(sg_from_bits(SG_U64, sg_size(popv().t)));"
+            )),
             Op::Var(name) => match name {
-                VarName::Index(i) => lines.push(format!("{}push(vars[{}]);", prefix, i)),
+                VarName::Index(i) => lines.push(format!("{}pushv(vars[{}]);", prefix, i)),
                 VarName::Named(n) => lines.push(format!(
-                    "{}push(var_{});",
+                    "{}pushv(var_{});",
                     prefix,
                     self.c_ident(&TargetName::Named(n.clone()))
                 )),
             },
             Op::StoreNamed(name) => {
                 lines.push(format!(
-                    "{}var_{} = pop();",
+                    "{}var_{} = popv();",
                     prefix,
                     self.c_ident(&TargetName::Named(name.clone()))
                 ));
@@ -200,8 +212,8 @@ impl Codegen {
                 // sigi's while is a stack-top check: pop is not consumed.
                 lines.push(format!("{}while (1) {{", prefix));
                 lines.push(format!("{}    if (sp <= 0) break;", prefix));
-                lines.push(format!("{}    double _cond = stack[sp - 1];", prefix));
-                lines.push(format!("{}    if (_cond == 0.0) break;", prefix));
+                lines.push(format!("{}    sv _cond = stack[sp - 1];", prefix));
+                lines.push(format!("{}    if (!sg_truthy(_cond)) break;", prefix));
                 for op in body {
                     lines.extend(self.codegen_op(op, indent + 1));
                 }
@@ -231,14 +243,14 @@ impl Codegen {
                 for op in body {
                     lines.extend(self.codegen_op(op, indent + 1));
                 }
-                lines.push(format!("{prefix}}} while (sp > 0 && stack[sp - 1] != 0.0);"));
+                lines.push(format!("{prefix}}} while (sp > 0 && sg_truthy(stack[sp - 1]));"));
             }
             Op::Break => lines.push(format!("{prefix}break;")),
             Op::Continue => lines.push(format!("{prefix}continue;")),
             Op::Switch(arms) => {
                 // Arms keep source order and fall through, as in C.
                 lines.push(format!("{prefix}{{"));
-                lines.push(format!("{prefix}    long long _sw = (long long)pop();"));
+                lines.push(format!("{prefix}    long long _sw = sg_as_ll(popv());"));
                 lines.push(format!("{prefix}    switch (_sw) {{"));
                 for arm in arms {
                     match arm.value {
@@ -291,8 +303,8 @@ impl Codegen {
                 else_body,
             } => {
                 lines.push(format!("{}{{", prefix));
-                lines.push(format!("{}    double _cond = pop();", prefix));
-                lines.push(format!("{}    if (_cond != 0.0) {{", prefix));
+                lines.push(format!("{}    sv _cond = popv();", prefix));
+                lines.push(format!("{}    if (sg_truthy(_cond)) {{", prefix));
                 for op in then_body {
                     lines.extend(self.codegen_op(op, indent + 2));
                 }
@@ -306,11 +318,10 @@ impl Codegen {
             Op::Simple(kind) => {
                 match kind.as_str() {
                     // ─── Arithmetic ──────────────────────────────
-                    "ADD" | "SUB" | "MUL" | "DIV" => {
-                        let op = match kind.as_str() { "ADD" => "+", "SUB" => "-", "MUL" => "*", _ => "/" };
-                        lines.push(format!("{}{{ double b = pop(); double a = pop(); push(a {} b); }}", prefix, op));
+                    "ADD" | "SUB" | "MUL" | "DIV" | "MOD" => {
+                        let op = match kind.as_str() { "ADD" => "SG_OP_ADD", "SUB" => "SG_OP_SUB", "MUL" => "SG_OP_MUL", "DIV" => "SG_OP_DIV", _ => "SG_OP_MOD" };
+                        lines.push(format!("{prefix}{{ sv b = popv(); sv a = popv(); pushv(sg_arith({op}, a, b)); }}"));
                     },
-                    "MOD" => lines.push(format!("{}{{ double b = pop(); double a = pop(); push(fmod(a, b)); }}", prefix)),
                     "INTDIV" => lines.push(format!("{prefix}{{ long long b = (long long)pop(); long long a = (long long)pop(); if (b == 0) {{ fprintf(stderr, \"Division by zero\\n\"); exit(1); }} push((double)(a / b)); }}")),
                     // ─── Bitwise and Shift ───────────────────────
                     "BITAND" | "BITOR" | "BITXOR" => {
@@ -321,17 +332,17 @@ impl Codegen {
                     "SHL" => lines.push(format!("{prefix}{{ int n = shift_count(pop()); long long a = (long long)pop(); push((double)(long long)((unsigned long long)a << n)); }}")),
                     "SHR" => lines.push(format!("{prefix}{{ int n = shift_count(pop()); long long a = (long long)pop(); push((double)(a >> n)); }}")),
                     // ─── Logical ─────────────────────────────────
-                    "LOGAND" => lines.push(format!("{prefix}{{ double b = pop(); double a = pop(); push((a != 0.0 && b != 0.0) ? 1.0 : 0.0); }}")),
-                    "LOGOR" => lines.push(format!("{prefix}{{ double b = pop(); double a = pop(); push((a != 0.0 || b != 0.0) ? 1.0 : 0.0); }}")),
+                    "LOGAND" => lines.push(format!("{prefix}{{ sv b = popv(); sv a = popv(); push((sg_truthy(a) && sg_truthy(b)) ? 1.0 : 0.0); }}")),
+                    "LOGOR" => lines.push(format!("{prefix}{{ sv b = popv(); sv a = popv(); push((sg_truthy(a) || sg_truthy(b)) ? 1.0 : 0.0); }}")),
                     // ─── Comparison ──────────────────────────────
                     "EQ" | "LT" | "GT" => {
-                        let op = match kind.as_str() { "EQ" => "==", "LT" => "<", _ => ">" };
-                        lines.push(format!("{}{{ double b = pop(); double a = pop(); push((a {} b) ? 1.0 : 0.0); }}", prefix, op));
+                        let op = match kind.as_str() { "EQ" => "SG_REL_EQ", "LT" => "SG_REL_LT", _ => "SG_REL_GT" };
+                        lines.push(format!("{prefix}{{ sv b = popv(); sv a = popv(); push(sg_rel({op}, a, b) ? 1.0 : 0.0); }}"));
                     },
-                    "NOT" => lines.push(format!("{}push((pop() == 0.0) ? 1.0 : 0.0);", prefix)),
+                    "NOT" => lines.push(format!("{prefix}push(sg_truthy(popv()) ? 0.0 : 1.0);")),
                     // ─── Stack Operations ────────────────────────
-                    "DUP" => lines.push(format!("{}{{ double x = stack[sp - 1]; push(x); }}", prefix)),
-                    "SWAP" => lines.push(format!("{}{{ double t = stack[sp - 1]; stack[sp - 1] = stack[sp - 2]; stack[sp - 2] = t; }}", prefix)),
+                    "DUP" => lines.push(format!("{prefix}{{ sv x = stack[sp - 1]; pushv(x); }}")),
+                    "SWAP" => lines.push(format!("{prefix}{{ sv t = stack[sp - 1]; stack[sp - 1] = stack[sp - 2]; stack[sp - 2] = t; }}")),
                     "DROP" => lines.push(format!("{}(void)pop();", prefix)),
                     // ─── Math Functions ──────────────────────────
                     "SIN" | "COS" | "TAN" | "SQRT" | "FLOOR" | "LOG" | "EXP" | "ABS" => {
@@ -357,10 +368,10 @@ impl Codegen {
                     "FILE_WRITE" => lines.push(format!("{}{{ int fd = (int)pop(); int size = (int)pop(); char *buf = (char *)malloc(size); for (int i = size - 1; i >= 0; i--) buf[i] = (char)pop(); FILE *f = fdopen(fd, \"w\"); int n = fwrite(buf, 1, size, f); push((double)n); free(buf); }}", prefix)),
                     "FILE_CLOSE" => lines.push(format!("{}{{ int fd = (int)pop(); FILE *f = fdopen(fd, \"r\"); fclose(f); }}", prefix)),
                     "USLEEP" => lines.push(format!("{}usleep((useconds_t)pop());", prefix)),
-                    "PRINT" => lines.push(format!("{prefix}printf(\"%g\\n\", pop());")),
-                    "PRINTC" => lines.push(format!("{}putchar((int)pop());", prefix)),
+                    "PRINT" => lines.push(format!("{prefix}sg_print(popv());")),
+                    "PRINTC" => lines.push(format!("{prefix}putchar((int)sg_as_ll(popv()));")),
                     "INPUT" => lines.push(format!("{}{{ double x; scanf(\"%lf\", &x); push(x); }}", prefix)),
-                    "STORE" => lines.push(format!("{}{{ int idx = (int)pop(); double val = pop(); vars[idx] = val; }}", prefix)),
+                    "STORE" => lines.push(format!("{prefix}{{ int idx = (int)pop(); vars[idx] = popv(); }}")),
                     "NOP" => {},
                     _ => {},
                 }
