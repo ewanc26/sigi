@@ -1,0 +1,12 @@
+\ Suffixed integer literals keep their type: unsigned values wrap, long values print signed.
+!4000000000u |
+!18446744073709551615ul |
+!-5l |
+!9223372036854775807ll |
+!5u !7u - |
+!5u !7u < |
+!-1l !1u + |
+!-7l !2l / |
+!7u !2u / |
+!4000000000u :.big
+.big |
