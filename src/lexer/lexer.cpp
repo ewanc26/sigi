@@ -76,7 +76,7 @@ std::vector<Token> Lexer::tokenize(){
                 if(peek()=='.'){ s+=advance(); while(std::isdigit(peek()))s+=advance(); }
                 if(peek()=='e'||peek()=='E'){ s+=advance(); if(peek()=='+'||peek()=='-')s+=advance(); while(std::isdigit(peek()))s+=advance(); }
                 while(std::isalpha(peek()))advance();
-                if(s.find('.')!=std::string::npos){ tokens.push_back(Token{"NUM",(double)std::stod(s),0,{},{},sl,sc}); }
+                if(s.find('.')!=std::string::npos || s.find('e')!=std::string::npos || s.find('E')!=std::string::npos){ tokens.push_back(Token{"NUM",(double)std::stod(s),0,{},{},sl,sc}); }
                 else if(s.size()>1&&s[0]=='0'){ long long v=0; for(char ch:s) if(ch>='0'&&ch<='7')v=v*8+(ch-'0'); tokens.push_back(Token{"NUM",0,v,{},{},sl,sc}); }
                 else { tokens.push_back(Token{"NUM",(double)std::stoll(s),std::stoll(s),{},{},sl,sc}); }
                 continue;
