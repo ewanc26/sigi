@@ -57,6 +57,18 @@ def main() -> int:
         if "variable index out of range" not in result.stderr:
             raise AssertionError(f"out-of-range variable store was not diagnosed: {result.stderr!r}")
 
+        fractional_store = temp / "fractional store.si"
+        fractional_store.write_text("!42 !1.5 :", encoding="utf-8")
+        result = run([compiler, str(fractional_store), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "variable index out of range" not in result.stderr:
+            raise AssertionError(f"fractional variable index was not diagnosed: {result.stderr!r}")
+
+        invalid_character = temp / "invalid character.si"
+        invalid_character.write_text("!1e100 ^", encoding="utf-8")
+        result = run([compiler, str(invalid_character), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "character value out of range" not in result.stderr:
+            raise AssertionError(f"out-of-range character value was not diagnosed: {result.stderr!r}")
+
         underflow = temp / "stack underflow.si"
         underflow.write_text("+", encoding="utf-8")
         failure = run([compiler, str(underflow), "--run", "--cc", str(wrapper)], expected_status=1)
