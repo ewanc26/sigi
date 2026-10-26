@@ -64,7 +64,7 @@ def main() -> int:
             raise AssertionError(f"fractional variable index was not diagnosed: {result.stderr!r}")
 
         invalid_character = temp / "invalid character.si"
-        invalid_character.write_text("!1e100 ^", encoding="utf-8")
+        invalid_character.write_text("!999999999999999999999999999999999999 ^", encoding="utf-8")
         result = run([compiler, str(invalid_character), "--run", "--cc", str(wrapper)], expected_status=1)
         if "character value out of range" not in result.stderr:
             raise AssertionError(f"out-of-range character value was not diagnosed: {result.stderr!r}")
