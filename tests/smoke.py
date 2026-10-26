@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def run(command: list[str], *, expected_status: int) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(command, text=True, capture_output=True, timeout=20)
+    result = subprocess.run(command, text=True, errors="replace", capture_output=True, timeout=20)
     if result.returncode != expected_status:
         raise AssertionError(
             f"command {command!r} returned {result.returncode}, expected {expected_status}\n"
