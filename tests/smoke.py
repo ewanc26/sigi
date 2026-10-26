@@ -65,7 +65,7 @@ def main() -> int:
 
         character_conversion = temp / "character conversion.si"
         character_conversion.write_text("!42 ^", encoding="utf-8")
-        generated = run([compiler, str(character_conversion), "--show-generated-c"])
+        generated = run([compiler, str(character_conversion), "--show-generated-c"], expected_status=0)
         if "sigi_checked_int(sigi_pop()" not in generated.stdout or "character value out of range" not in generated.stdout:
             raise AssertionError("character output does not use the checked integer conversion helper")
 
