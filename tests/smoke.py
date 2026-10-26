@@ -39,6 +39,18 @@ def main() -> int:
         if result.stdout != "Hello, World!\n":
             raise AssertionError(f"unexpected output: {result.stdout!r}")
 
+        large_float = temp / "large float.si"
+        large_float.write_text("!1e100 |", encoding="utf-8")
+        result = run([compiler, str(large_float), "--run", "--cc", str(wrapper)], expected_status=0)
+        if result.stdout != "1e+100\n":
+            raise AssertionError(f"exponent-form numeric literal failed: {result.stdout!r}")
+
+        invalid_character = temp / "invalid character.si"
+        invalid_character.write_text("!1e100 ^", encoding="utf-8")
+        result = run([compiler, str(invalid_character), "--run", "--cc", str(wrapper)], expected_status=1)
+        if "character value out of range" not in result.stderr:
+            raise AssertionError(f"out-of-range character value was not diagnosed: {result.stderr!r}")
+
         output_c = temp / "generated output with spaces.c"
         run([compiler, example, "-o", str(output_c)], expected_status=0)
         generated = output_c.read_text(encoding="utf-8")
