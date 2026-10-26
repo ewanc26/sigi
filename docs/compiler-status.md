@@ -18,7 +18,7 @@ The current frontend and backend are incomplete. Unsupported source characters/t
 
 The source and CLI smoke tests currently cover these basics:
 
-- Numeric literals, string literals, and character literals.
+- Numeric literals, including decimal exponent notation such as `1e100`, string literals, and character literals.
 - Stack manipulation: `@` (duplicate), `#` (swap), and `$` (drop).
 - Arithmetic: `+`, `-`, `*`, `/`, and `%`.
 - Comparisons: `=`, `<`, and `>`.
