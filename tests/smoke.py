@@ -63,11 +63,11 @@ def main() -> int:
         if "variable index out of range" not in result.stderr:
             raise AssertionError(f"fractional variable index was not diagnosed: {result.stderr!r}")
 
-        invalid_character = temp / "invalid character.si"
-        invalid_character.write_text("!2147483648 ^", encoding="utf-8")
-        result = run([compiler, str(invalid_character), "--run", "--cc", str(wrapper)], expected_status=1)
-        if "character value out of range" not in result.stderr:
-            raise AssertionError(f"out-of-range character value was not diagnosed: {result.stderr!r}")
+        character_conversion = temp / "character conversion.si"
+        character_conversion.write_text("!42 ^", encoding="utf-8")
+        generated = run([compiler, str(character_conversion), "--show-generated-c"])
+        if "sigi_checked_int(sigi_pop()" not in generated.stdout or "character value out of range" not in generated.stdout:
+            raise AssertionError("character output does not use the checked integer conversion helper")
 
         underflow = temp / "stack underflow.si"
         underflow.write_text("+", encoding="utf-8")
