@@ -5,9 +5,10 @@
 
 std::string emitSigi(const Program &p) {
     std::stringstream ss;
-    ss << "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n#include <string.h>\n#include <time.h>\n\n";
+    ss << "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n#include <limits.h>\n#include <string.h>\n#include <time.h>\n\n";
     ss << "double stack[10000]; int sp = 0;\n";
     ss << "static void sigi_fail(const char *m) { fprintf(stderr, \"Sigi runtime error: %s\\n\", m); exit(1); }\n";
+    ss << "static int sigi_checked_int(double v, const char *m) { if (!isfinite(v) || v < (double)INT_MIN || v > (double)INT_MAX) sigi_fail(m); return (int)v; }\n";
     ss << "static void sigi_push(double v) { if (sp >= 10000) sigi_fail(\"stack overflow\"); stack[sp++] = v; }\n";
     ss << "static double sigi_pop(void) { if (sp <= 0) sigi_fail(\"stack underflow\"); return stack[--sp]; }\n";
     ss << "double vars[100] = {0};\n\n";
@@ -31,7 +32,7 @@ std::string emitSigi(const Program &p) {
         } else if (op.kind == SOp::LoadVar) {
             ss << "    sigi_push(vars[" << op.varIndex << "]);\n";
         } else if (op.kind == SOp::Store) {
-            ss << "    { int idx = (int)sigi_pop(); double val = sigi_pop(); if (idx < 0 || idx >= 100) sigi_fail(\"variable index out of range\"); vars[idx] = val; }\n";
+            ss << "    { double raw_idx = sigi_pop(); if (!isfinite(raw_idx) || raw_idx < 0 || raw_idx >= 100 || floor(raw_idx) != raw_idx) sigi_fail(\"variable index out of range\"); int idx = (int)raw_idx; double val = sigi_pop(); vars[idx] = val; }\n";
         } else if (op.kind == SOp::Dup) {
             ss << "    if (sp <= 0) sigi_fail(\"stack underflow\"); sigi_push(stack[sp-1]);\n";
         } else if (op.kind == SOp::Swap) {
@@ -59,7 +60,7 @@ std::string emitSigi(const Program &p) {
         } else if (op.kind == SOp::Print) {
             ss << "    printf(\"%g\\n\", sigi_pop());\n";
         } else if (op.kind == SOp::PrintChar) {
-            ss << "    printf(\"%c\", (char)sigi_pop()); fflush(stdout);\n";
+            ss << "    { int value = sigi_checked_int(sigi_pop(), \"character value out of range\"); putchar((unsigned char)value); fflush(stdout); }\n";
         } else if (op.kind == SOp::Input) {
             ss << "    { double x; if (scanf(\"%lf\", &x) != 1) sigi_fail(\"numeric input failed\"); sigi_push(x); }\n";
         } else if (op.kind == SOp::WhileStart) {
