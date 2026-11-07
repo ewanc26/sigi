@@ -20,4 +20,4 @@ Guidance for AI coding agents working in **sigi**.
 
 ## Recent history
 
-Sync AGENTS.md from zincfox; Sync AGENTS.md from zincfox; Sync AGENTS.md from zincfox; Sync CONTRIBUTING.md from zincfox; Sync CONTRIBUTING.md from zincfox
+Document exponent-form floating-point literals; Remove unsupported generated-C CLI flag from smoke test; Document exponent-form numeric literal support; Test exponent-form floats and checked character conversion; Recognize exponent-only decimal literals as floating-point numbers; Document checked runtime conversions in README; Pass the expected status to generated-C smoke test; Verify character output uses checked conversion helper
