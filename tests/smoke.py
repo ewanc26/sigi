@@ -301,6 +301,14 @@ def main() -> int:
         if result.stdout != "1\n2\n3\n":
             raise AssertionError(f"sort3 example failed: {result.stdout!r}")
 
+        primes_example = str(root / "examples" / "primes.si")
+        result = run(
+            [compiler, primes_example, "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "2\n3\n5\n7\n11\n13\n17\n19\n23\n29\n":
+            raise AssertionError(f"primes example failed: {result.stdout!r}")
+
         collatz_example = str(root / "examples" / "collatz.si")
         result = run(
             [compiler, collatz_example, "--run", "--cc", str(wrapper)],

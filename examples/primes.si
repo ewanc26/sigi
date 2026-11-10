@@ -1,0 +1,21 @@
+\ Primes from 2 to 30 by trial division.
+\ Slots: 0 = n (candidate), 1 = d (divisor), 2 = flag (1 while prime so far).
+\ The while forms peek the stack top, so loops end each iteration by
+\ pushing the next condition and tolerate the working values left below.
+!2 !0 :
+!1
+[
+  !1 !2 :
+  !2 !1 :
+  <1> <0> < <2> *
+  [
+    <0> <1> % !0 =
+    { !0 !2 : ; }
+    <1> @ !1 + !1 :
+    <1> <0> < <2> *
+  ]
+  <2>
+  { <0> @ | ; }
+  <0> @ !1 + !0 :
+  <0> !31 <
+]
