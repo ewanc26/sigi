@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include <cstdio>
 #include <sstream>
 #include <fstream>
 #include <cctype>
@@ -47,7 +48,12 @@ std::string emitSigi(const Program &p) {
     ss << "    srand((unsigned)time(NULL));\n";
     for (auto &op : p.mainOps) {
         if (op.kind == SOp::PushNum) {
-            ss << "    sigi_push(" << op.num << ");\n";
+            // Full-precision literal: a std default-formatted stream truncates
+            // to 6 significant digits, which silently corrupts programs that
+            // carry high-precision constants. %.17g round-trips a double.
+            char buf[64];
+            snprintf(buf, sizeof buf, "%.17g", op.num);
+            ss << "    sigi_push(" << buf << ");\n";
         } else if (op.kind == SOp::StringLit) {
             ss << "    {";
             for (int v : op.strvals) {
