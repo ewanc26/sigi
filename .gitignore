@@ -1,6 +1,7 @@
 # CMake and native build outputs
 /build/
 /build-*/
+/build_*/
 /CMakeFiles/
 /CMakeCache.txt
 /CMakeUserPresets.json
