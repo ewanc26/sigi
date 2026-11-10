@@ -81,6 +81,28 @@ std::string emitSigi(const Program &p) {
             ss << "    break;\n";
         } else if (op.kind == SOp::Continue) {
             ss << "    continue;\n";
+        } else if (op.kind == SOp::Sin) {
+            ss << "    sigi_push(sin(sigi_pop()));\n";
+        } else if (op.kind == SOp::Cos) {
+            ss << "    sigi_push(cos(sigi_pop()));\n";
+        } else if (op.kind == SOp::Tan) {
+            ss << "    sigi_push(tan(sigi_pop()));\n";
+        } else if (op.kind == SOp::Sqrt) {
+            ss << "    sigi_push(sqrt(sigi_pop()));\n";
+        } else if (op.kind == SOp::Floor) {
+            ss << "    sigi_push(floor(sigi_pop()));\n";
+        } else if (op.kind == SOp::Log) {
+            ss << "    sigi_push(log(sigi_pop()));\n";
+        } else if (op.kind == SOp::Exp) {
+            ss << "    sigi_push(exp(sigi_pop()));\n";
+        } else if (op.kind == SOp::Abs) {
+            ss << "    sigi_push(fabs(sigi_pop()));\n";
+        } else if (op.kind == SOp::Pow) {
+            // Binary: base then exponent on the stack.
+            ss << "    { double b=sigi_pop(),a=sigi_pop(); sigi_push(pow(a,b)); }\n";
+        } else if (op.kind == SOp::Atan2) {
+            // Binary: y then x on the stack.
+            ss << "    { double y=sigi_pop(),x=sigi_pop(); sigi_push(atan2(x,y)); }\n";
         } else {
             throw std::runtime_error("Sigi C++ code generator does not yet support this operation");
         }

@@ -301,6 +301,20 @@ def main() -> int:
         if result.stdout != "1\n2\n3\n":
             raise AssertionError(f"sort3 example failed: {result.stdout!r}")
 
+        # The donut demo emits a 4-frame polygonal torus as SVG.
+        donut_example = str(root / "examples" / "donut.si")
+        result = run(
+            [compiler, donut_example, "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        quads = result.stdout.count("<polygon")
+        if (
+            quads != 640
+            or not result.stdout.startswith("<svg")
+            or "</svg>" not in result.stdout
+        ):
+            raise AssertionError(f"donut demo malformed: quads={quads}")
+
         primes_example = str(root / "examples" / "primes.si")
         result = run(
             [compiler, primes_example, "--run", "--cc", str(wrapper)],

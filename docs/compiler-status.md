@@ -26,12 +26,13 @@ The source and CLI smoke tests currently cover these basics:
 - Numbered variables: `<n>` to load and `:` to store.
 - Numeric output `|`, character output `^`, and numeric input `?`.
 - While loops (`[...]`) and do-while loops (`d[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) inside both loop forms.
+- Math built-ins, unary and stack order documented in the README: `S` sin, `C` cos, `T` tan, `R` sqrt, `F` floor, `L` log, `E` exp, `M` abs, and binary `P` pow (base then exponent) and `N` atan2 (y then x).
 
 This is a source-inspected implementation boundary, not a claim of C conformance or full language completeness. Generated C now checks stack underflow and overflow for stack operations, rejects division and remainder by zero, and diagnoses failed numeric input. Load indices are checked during parsing; stores now reject non-integral, non-finite, and out-of-range indices before casting. Character output validates the floating-point value before converting it to an integer.
 
 ## Not yet implemented end-to-end
 
-The README's broad symbol reference includes syntax intended for the language but not currently lowered correctly by the C++ implementation. Basic `while` loops (`[...]`), do-while loops (`d[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) are lowered to C and covered by end-to-end tests. Still unsupported are function definitions/calls, for loops, named variables, math built-ins, arrays, file I/O, foreign-function calls, pointer operations, aggregates, casts, switch, and goto. The C++ parser rejects unmatched delimiters, missing if-else separators, `d` without `[`, and break/continue outside a loop. These constructs must not be advertised as usable until the parser, semantic analysis, and code generator all handle them and regression tests prove the behaviour.
+The README's broad symbol reference includes syntax intended for the language but not currently lowered correctly by the C++ implementation. Basic `while` loops (`[...]`), do-while loops (`d[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) are lowered to C and covered by end-to-end tests. Still unsupported are function definitions/calls, for loops, named variables, arrays, file I/O, foreign-function calls, pointer operations, aggregates, casts, switch, and goto. The C++ parser rejects unmatched delimiters, missing if-else separators, `d` without `[`, and break/continue outside a loop. These constructs must not be advertised as usable until the parser, semantic analysis, and code generator all handle them and regression tests prove the behaviour.
 
 The shared `capabilities.json` matrix still needs to be reconciled against the C++ implementation; see [issue #16](https://github.com/ewanc26/sigi/issues/16). Do not use its current entries as independent proof that a feature works.
 
