@@ -1,0 +1,5 @@
+\ d[ ... ] runs the body first and then repeats while the stack top is
+\ nonzero: count down from 3, one print per pass.
+!3 !0 :
+d[ <0> @ | <0> @ !1 - !0 : <0> ]
+$

@@ -1,0 +1,12 @@
+\ Sort three slot values into ascending order with bubble passes.
+\ A store pops index-then-value from the top, so "load both, store both
+\ reversed" swaps two slots.
+!3 !0 :
+!1 !1 :
+!2 !2 :
+
+<1> <0> < { <0> <1> !0 : !1 : ; }
+<2> <1> < { <1> <2> !1 : !2 : ; }
+<1> <0> < { <0> <1> !0 : !1 : ; }
+
+<0> | <1> | <2> |

@@ -283,6 +283,41 @@ def main() -> int:
             raise AssertionError(
                 f"missing-source diagnostic was unclear: {failure.stderr!r}"
             )
+
+        # Complex examples: count down with do-while, sort slots, run Collatz.
+        do_while_example = str(root / "examples" / "do_while.si")
+        result = run(
+            [compiler, do_while_example, "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "3\n2\n1\n":
+            raise AssertionError(f"do-while example failed: {result.stdout!r}")
+
+        sort3_example = str(root / "examples" / "sort3.si")
+        result = run(
+            [compiler, sort3_example, "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "1\n2\n3\n":
+            raise AssertionError(f"sort3 example failed: {result.stdout!r}")
+
+        collatz_example = str(root / "examples" / "collatz.si")
+        result = run(
+            [compiler, collatz_example, "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        collatz = result.stdout.splitlines()
+        if (
+            len(collatz) != 112
+            or collatz[0] != "27"
+            or collatz[-1] != "1"
+            or "82" not in collatz
+            or "9232" not in collatz
+        ):
+            raise AssertionError(
+                f"collatz example did not produce the canonical trajectory: "
+                f"first={collatz[0]!r} last={collatz[-1]!r} count={len(collatz)}"
+            )
     return 0
 
 

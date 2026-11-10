@@ -1,0 +1,12 @@
+\ Collatz from 27 down to 1: the current value lives in slot 0 and the
+\ loop condition (value != 1) stays on top of the stack.
+!27 !0 :
+<0> !1 = ~
+[
+  <0> @ |
+  <0> @ !2 % !0 =
+  { <0> @ !2 / !0 : ; <0> @ !3 * !1 + !0 : }
+  <0> !1 = ~
+]
+$
+<0> @ |
