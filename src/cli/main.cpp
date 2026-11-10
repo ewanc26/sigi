@@ -14,19 +14,11 @@
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace {
-
-std::string shell_quote(const std::string &value) {
-    std::string quoted = "'";
-    for (char c : value) {
-        if (c == '\'') quoted += "'\\''";
-        else quoted += c;
-    }
-    quoted += "'";
-    return quoted;
-}
 
 std::filesystem::path create_temp_directory() {
     const auto base = std::filesystem::temp_directory_path();
@@ -52,6 +44,31 @@ struct TemporaryDirectory {
     }
     std::filesystem::path path;
 };
+
+int run_command(const std::string &program, const std::vector<std::string> &args) {
+    std::vector<char *> argv;
+    argv.push_back(const_cast<char *>(program.c_str()));
+    for (const auto &arg : args) {
+        argv.push_back(const_cast<char *>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        return -1;
+    }
+    if (pid == 0) {
+        execvp(program.c_str(), argv.data());
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) == -1) {
+        return -1;
+    }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
+    return 1;
+}
 
 } // namespace
 
@@ -149,23 +166,19 @@ int main(int argc, char **argv) {
             }
         }
 
-        const std::string compile_command = shell_quote(cc) + " " + shell_quote(cfile) +
-                                            " -o " + shell_quote(exefile) + " -lm";
-        const int compile_status = std::system(compile_command.c_str());
+        const int compile_status = run_command(cc, {cfile, "-o", exefile, "-lm"});
         if (compile_status == -1) {
             std::cerr << "sigic: failed to start the host C compiler\n";
             return 1;
         }
-        if (!WIFEXITED(compile_status) || WEXITSTATUS(compile_status) != 0) return 1;
+        if (compile_status != 0) return compile_status;
 
-        const int run_status = std::system(shell_quote(exefile).c_str());
+        const int run_status = run_command(exefile, {});
         if (run_status == -1) {
             std::cerr << "sigic: failed to start the generated program\n";
             return 1;
         }
-        if (WIFEXITED(run_status)) return WEXITSTATUS(run_status);
-        if (WIFSIGNALED(run_status)) return 128 + WTERMSIG(run_status);
-        return 1;
+        return run_status;
     } catch (const std::exception &e) {
         std::cerr << "sigic: " << e.what() << "\n";
         return 1;
