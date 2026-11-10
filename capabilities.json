@@ -22,14 +22,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/types_char_literals.si"
+            "tests/differential/char_literals.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -48,15 +48,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/literals_typed.si",
-            "tests/differential/casts_sized.si"
+            "tests/differential/sized_integers.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -75,14 +74,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/types_floating.si"
+            "tests/differential/floating.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -102,13 +101,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "enum declarations are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_enums.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -128,13 +125,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "alias declarations are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_typedef.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -153,14 +148,16 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
+          "status": "partial",
+          "tests": [
+            "tests/differential/pointers.sel",
+            "tests/differential/global_addresses.sel"
+          ],
+          "note": "basic pointer use passes; global address-of expressions and nullptr declarations are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_pointers.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -180,13 +177,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "struct declarations with brace bodies are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_structs.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -206,13 +201,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "union declarations are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_unions.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -232,13 +225,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "measure expressions are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/casts_sized.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -249,7 +240,8 @@
         "plainspeak": {
           "status": "implemented",
           "tests": [
-            "tests/differential/decl_initializers.eng"
+            "tests/differential/decl_initializers.eng",
+            "tests/differential/decl_file_scope_aggregates.eng"
           ]
         },
         "numlang": {
@@ -258,13 +250,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "aggregate initializer expressions are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_initializers.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -285,13 +275,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "array syntax is rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_multidim.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -311,13 +299,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "qualified declarations are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/types_qualifiers.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -336,14 +322,15 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
+          "status": "partial",
+          "tests": [
+            "tests/differential/ternary.sel"
+          ],
+          "note": "ternary expressions parse and emit, but a top-level ?: initializer produces an invalid non-constant global in generated C."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/expr_ternary.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -362,14 +349,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/expr_compound_assign.si"
+            "tests/differential/compound_assign.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -388,14 +375,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/expr_incdec.si"
+            "tests/differential/incdec.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -414,14 +401,15 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
+          "status": "partial",
+          "tests": [
+            "tests/differential/casts.sel"
+          ],
+          "note": "cast expressions parse and emit typed prints, but outputs still differ from the C reference."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/casts_sized.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -441,13 +429,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "comma expressions are rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/expr_comma.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -467,13 +453,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "switch with braced case bodies is rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/control_switch.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -492,14 +476,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/control_do_while.si"
+            "tests/differential/do_while.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -518,14 +502,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/control_break_continue.si"
+            "tests/differential/break_continue.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -544,14 +528,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/control_goto.si"
+            "tests/differential/goto.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -571,13 +555,11 @@
         },
         "selenium": {
           "status": "missing",
-          "note": "not started"
+          "note": "function pointer syntax is rejected at parse time."
         },
         "sigi": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/func_pointers.si"
-          ]
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -596,14 +578,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/func_recursion.si"
+            "tests/differential/func_recursion.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -622,15 +604,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/literals_numeric.si",
-            "tests/diagnostics.rs"
+            "tests/differential/literals_numeric.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -650,15 +631,14 @@
           "note": "not started"
         },
         "selenium": {
-          "status": "missing",
-          "note": "not started"
-        },
-        "sigi": {
           "status": "implemented",
           "tests": [
-            "tests/differential/literals_escapes.si",
-            "tests/diagnostics.rs"
+            "tests/differential/literals_escapes.sel"
           ]
+        },
+        "sigi": {
+          "status": "missing",
+          "note": "not started"
         }
       }
     },
@@ -682,8 +662,7 @@
         "selenium": {
           "status": "implemented",
           "tests": [
-            "tests/differential/logical.sel",
-            "tests/differential/arithmetic.sel"
+            "tests/differential/logical.sel"
           ]
         },
         "sigi": {
@@ -811,11 +790,12 @@
           ]
         },
         "selenium": {
-          "status": "implemented",
+          "status": "partial",
           "tests": [
             "tests/differential/while_loop.sel",
             "tests/differential/for_loop.sel"
-          ]
+          ],
+          "note": "while loops pass; the C++ port rejects for-loop syntax at parse time."
         },
         "sigi": {
           "status": "implemented",
@@ -873,18 +853,14 @@
           ]
         },
         "selenium": {
-          "status": "implemented",
-          "tests": [
-            "tests/differential/arrays.sel"
-          ]
+          "status": "missing",
+          "note": "array subscript syntax is rejected at parse time."
         },
         "sigi": {
           "status": "implemented",
           "tests": [
             "tests/differential/arrays.si",
-            "tests/differential/array_bounds.si",
-            "tests/diagnostics.rs",
-            "tests/differential/vars_declare_before_use.si"
+            "tests/differential/array_bounds.si"
           ]
         }
       }
@@ -966,10 +942,11 @@
           ]
         },
         "selenium": {
-          "status": "implemented",
+          "status": "partial",
           "tests": [
             "tests/differential/ffi_call.sel"
-          ]
+          ],
+          "note": "summon extern declarations parse, but the declared symbol is not linked in generated builds."
         },
         "sigi": {
           "status": "implemented",
