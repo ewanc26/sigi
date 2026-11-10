@@ -1,6 +1,8 @@
 #include "codegen.h"
 #include <sstream>
 #include <fstream>
+#include <cctype>
+#include <map>
 #include <stdexcept>
 
 std::string emitSigi(const Program &p) {
@@ -12,6 +14,35 @@ std::string emitSigi(const Program &p) {
     ss << "static void sigi_push(double v) { if (sp >= 10000) sigi_fail(\"stack overflow\"); stack[sp++] = v; }\n";
     ss << "static double sigi_pop(void) { if (sp <= 0) sigi_fail(\"stack underflow\"); return stack[--sp]; }\n";
     ss << "double vars[100] = {0};\n\n";
+    // Foreign C functions: declared with `x "header" .name !N`, called with `c .name`.
+    std::map<std::string, int> ffiArity;
+    {
+        std::map<std::string, std::string> ffiHeader;
+        for (auto &op : p.mainOps) {
+            if (op.kind != SOp::FfiDecl) continue;
+            if (ffiArity.count(op.name) && (ffiArity[op.name] != op.funcNum || ffiHeader[op.name] != op.header)) {
+                throw std::runtime_error("conflicting FFI declarations for ." + op.name);
+            }
+            ffiArity[op.name] = op.funcNum;
+            ffiHeader[op.name] = op.header;
+        }
+        for (auto &h : ffiHeader) {
+            for (char ch : h.second) {
+                if (!(std::isalnum((unsigned char)ch) || ch=='.' || ch=='_' || ch=='/' || ch=='-')) {
+                    throw std::runtime_error("invalid character in FFI header name: " + h.second);
+                }
+            }
+            ss << "#include <" << h.second << ">\n";
+        }
+        ss << "\n";
+        for (auto &op : p.mainOps) {
+            if (op.kind != SOp::FfiCall) continue;
+            if (!ffiArity.count(op.name)) {
+                throw std::runtime_error("FFI call to undeclared function ." + op.name);
+            }
+        }
+    }
+
     ss << "int main() {\n";
     ss << "    srand((unsigned)time(NULL));\n";
     for (auto &op : p.mainOps) {
@@ -103,6 +134,23 @@ std::string emitSigi(const Program &p) {
         } else if (op.kind == SOp::Atan2) {
             // Binary: y then x on the stack.
             ss << "    { double y=sigi_pop(),x=sigi_pop(); sigi_push(atan2(x,y)); }\n";
+        } else if (op.kind == SOp::FfiDecl) {
+            // Handled above by emitting the header include; nothing to do here.
+        } else if (op.kind == SOp::FfiCall) {
+            if (!ffiArity.count(op.name)) {
+                throw std::runtime_error("FFI call to undeclared function ." + op.name);
+            }
+            const int argc = ffiArity[op.name];
+            ss << "    {";
+            for (int a = argc; a >= 1; --a) {
+                ss << " double sigi_arg" << a << "=sigi_pop();";
+            }
+            ss << " sigi_push(" << op.name << "(";
+            for (int a = 1; a <= argc; ++a) {
+                if (a > 1) ss << ",";
+                ss << "sigi_arg" << a;
+            }
+            ss << ")); }\n";
         } else {
             throw std::runtime_error("Sigi C++ code generator does not yet support this operation");
         }

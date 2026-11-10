@@ -17,7 +17,7 @@ struct SOp {
         IfStart, IfElse, IfEnd,
         FuncDef, CallFunc, CallNamed,
         Sin,Cos,Tan,Sqrt,Pow,Floor,Log,Exp,Abs,Atan2,
-        Break, Continue
+        Break, Continue, FfiDecl, FfiCall
     };
     Kind kind;
     double num = 0;
@@ -25,6 +25,7 @@ struct SOp {
     std::vector<int> strvals;
     int varIndex = -1;
     std::string name;
+    std::string header;
     int funcNum = 0;
 };
 

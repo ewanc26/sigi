@@ -54,6 +54,37 @@ Program Parser::parse(){
         if(t.kind=="CALLNAMED"){ op.kind=SOp::CallNamed; op.name=t.name; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="BREAK"){ op.kind=SOp::Break; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="CONTINUE"){ op.kind=SOp::Continue; advance(); mainOps.push_back(op); continue; }
+        if(t.kind=="FFIDECL"){
+            advance();
+            const Token &hdr = peek();
+            if(hdr.kind!="STRING") throw std::runtime_error("FFI declaration needs a quoted header at line " + std::to_string(hdr.line));
+            advance();
+            std::string headerStr(hdr.strvals.begin(), hdr.strvals.end());
+            const Token &nm = peek();
+            if(nm.kind!="DOTNAME") throw std::runtime_error("FFI declaration needs a .name at line " + std::to_string(nm.line));
+            advance();
+            const Token &ar = peek();
+            if(ar.kind!="NUM") throw std::runtime_error("FFI declaration needs '!N' argument count at line " + std::to_string(ar.line));
+            int argc = (int)(ar.value==0.0 ? (double)ar.ival : ar.value);
+            if(argc < 0 || argc > 26) throw std::runtime_error("FFI argument count out of range at line " + std::to_string(ar.line));
+            advance();
+            op.kind = SOp::FfiDecl;
+            op.name = nm.name;
+            op.header = headerStr;
+            op.funcNum = argc;
+            mainOps.push_back(op);
+            continue;
+        }
+        if(t.kind=="FFICALL"){
+            advance();
+            const Token &nm = peek();
+            if(nm.kind!="DOTNAME") throw std::runtime_error("FFI call needs a .name at line " + std::to_string(nm.line) + ", column " + std::to_string(nm.col));
+            advance();
+            op.kind = SOp::FfiCall;
+            op.name = nm.name;
+            mainOps.push_back(op);
+            continue;
+        }
 
         if(t.kind=="S"){ op.kind=SOp::Sin; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="C"){ op.kind=SOp::Cos; advance(); mainOps.push_back(op); continue; }

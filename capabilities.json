@@ -953,8 +953,11 @@
           "note": "summon extern declarations parse, but the declared symbol is not linked in generated builds."
         },
         "sigi": {
-          "status": "missing",
-          "note": "ffi_call.si fails: summon-style linking of foreign functions is not yet implemented."
+          "status": "implemented",
+          "tests": [
+            "tests/differential/ffi_call.si"
+          ],
+          "note": "`x \"header\" .name !N` declarations emit a matching include and `c .name` calls lower to C calls; covered by tests/differential/ffi_call.si."
         }
       }
     },
