@@ -203,6 +203,62 @@ def main() -> int:
                 f"invalid continue was not diagnosed: {failure.stderr!r}"
             )
 
+        do_while_countdown = temp / "do while countdown.si"
+        do_while_countdown.write_text(
+            "!3 <0>: d[ <0> @ | <0> !1 - !0 : <0> ]", encoding="utf-8"
+        )
+        result = run(
+            [compiler, str(do_while_countdown), "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "3\n2\n1\n":
+            raise AssertionError(f"do-while countdown failed: {result.stdout!r}")
+
+        do_while_once = temp / "do while runs once.si"
+        do_while_once.write_text("!0 <0>: d[ <0> | !0 ]", encoding="utf-8")
+        result = run(
+            [compiler, str(do_while_once), "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "0\n":
+            raise AssertionError(
+                f"do-while did not run its body exactly once: {result.stdout!r}"
+            )
+
+        bare_do = temp / "do without bracket.si"
+        bare_do.write_text("!1 d", encoding="utf-8")
+        failure = run([compiler, str(bare_do), "-o", str(output_c)], expected_status=1)
+        if "expected '[' after 'd'" not in failure.stderr:
+            raise AssertionError(f"bare 'd' was not diagnosed: {failure.stderr!r}")
+
+        do_while_break = temp / "do while break.si"
+        do_while_break.write_text('!1 d[ "once" <> !1 ]', encoding="utf-8")
+        result = run(
+            [compiler, str(do_while_break), "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "once":
+            raise AssertionError(f"break in do-while failed: {result.stdout!r}")
+
+        signed_literals = temp / "signed literals.si"
+        signed_literals.write_text("!-7 | !+3 |", encoding="utf-8")
+        result = run(
+            [compiler, str(signed_literals), "--run", "--cc", str(wrapper)],
+            expected_status=0,
+        )
+        if result.stdout != "-7\n3\n":
+            raise AssertionError(f"signed literals failed: {result.stdout!r}")
+
+        bad_literal = temp / "bare sign literal.si"
+        bad_literal.write_text("!- |", encoding="utf-8")
+        failure = run(
+            [compiler, str(bad_literal), "-o", str(output_c)], expected_status=1
+        )
+        if "invalid numeric literal after '!'" not in failure.stderr:
+            raise AssertionError(
+                f"bare sign literal was not diagnosed: {failure.stderr!r}"
+            )
+
         invalid_control = temp / "break outside loop.si"
         invalid_control.write_text("<>", encoding="utf-8")
         failure = run(

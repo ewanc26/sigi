@@ -25,3 +25,27 @@ TEST_CASE("parser rejects token kinds it does not implement") {
     Parser parser(tokens);
     REQUIRE_THROWS(parser.parse());
 }
+
+TEST_CASE("d followed by bracket parses as a do-while loop") {
+    Lexer lexer("d[ !1 ]");
+    auto tokens = lexer.tokenize();
+    Parser parser(tokens);
+    auto program = parser.parse();
+    REQUIRE(program.mainOps.size() == 3);
+    REQUIRE(program.mainOps.front().kind == SOp::DoWhileStart);
+    REQUIRE(program.mainOps.back().kind == SOp::DoWhileEnd);
+}
+
+TEST_CASE("d without a bracket is rejected") {
+    Lexer lexer("!1 d");
+    auto tokens = lexer.tokenize();
+    Parser parser(tokens);
+    REQUIRE_THROWS(parser.parse());
+}
+
+TEST_CASE("break inside a do-while loop is accepted") {
+    Lexer lexer("d[ <> ]");
+    auto tokens = lexer.tokenize();
+    Parser parser(tokens);
+    REQUIRE_NOTHROW(parser.parse());
+}

@@ -67,6 +67,10 @@ std::string emitSigi(const Program &p) {
             ss << "    while (sp > 0 && stack[sp-1] != 0) {\n";
         } else if (op.kind == SOp::WhileEnd) {
             ss << "    }\n";
+        } else if (op.kind == SOp::DoWhileStart) {
+            ss << "    do {\n";
+        } else if (op.kind == SOp::DoWhileEnd) {
+            ss << "    } while (sp > 0 && stack[sp-1] != 0);\n";
         } else if (op.kind == SOp::IfStart) {
             ss << "    if (sigi_pop() != 0) {\n";
         } else if (op.kind == SOp::IfElse) {

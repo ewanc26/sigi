@@ -13,6 +13,7 @@ struct SOp {
         StringLit, CharLit,
         Store, LoadVar, StoreNamed, LoadNamed,
         WhileStart, WhileEnd,
+        DoWhileStart, DoWhileEnd,
         IfStart, IfElse, IfEnd,
         FuncDef, CallFunc, CallNamed,
         Sin,Cos,Tan,Sqrt,Pow,Floor,Log,Exp,Abs,Atan2,

@@ -70,15 +70,21 @@ std::vector<Token> Lexer::tokenize(){
             int sl=line,sc=col; advance();
             if(std::isdigit(peek())||peek()=='.'||peek()=='-'||peek()=='+'){
                 std::string s;
+                if(peek()=='-'||peek()=='+') s+=advance();
                 if(peek()=='0'&&peek(1)=='x'){ s+=advance();s+=advance(); while(std::isxdigit(peek()))s+=advance(); while(std::isalpha(peek()))advance(); long long v=std::stoll(s,nullptr,16); tokens.push_back(Token{"NUM",0,v,{},{},sl,sc}); continue;}
                 if(peek()=='0'&&peek(1)=='b'){ s+=advance();s+=advance(); while(peek()=='0'||peek()=='1')s+=advance(); while(std::isalpha(peek()))advance(); long long v=0; for(size_t j=2;j<s.size();j++) v=v*2+(s[j]-'0'); tokens.push_back(Token{"NUM",0,v,{},{},sl,sc}); continue;}
                 while(std::isdigit(peek()))s+=advance();
                 if(peek()=='.'){ s+=advance(); while(std::isdigit(peek()))s+=advance(); }
                 if(peek()=='e'||peek()=='E'){ s+=advance(); if(peek()=='+'||peek()=='-')s+=advance(); while(std::isdigit(peek()))s+=advance(); }
                 while(std::isalpha(peek()))advance();
-                if(s.find('.')!=std::string::npos || s.find('e')!=std::string::npos || s.find('E')!=std::string::npos){ tokens.push_back(Token{"NUM",(double)std::stod(s),0,{},{},sl,sc}); }
-                else if(s.size()>1&&s[0]=='0'){ long long v=0; for(char ch:s) if(ch>='0'&&ch<='7')v=v*8+(ch-'0'); tokens.push_back(Token{"NUM",0,v,{},{},sl,sc}); }
-                else { tokens.push_back(Token{"NUM",(double)std::stoll(s),std::stoll(s),{},{},sl,sc}); }
+                const std::string where = " at line " + std::to_string(sl) + ", column " + std::to_string(sc);
+                try {
+                    if(s.find('.')!=std::string::npos || s.find('e')!=std::string::npos || s.find('E')!=std::string::npos){ tokens.push_back(Token{"NUM",(double)std::stod(s),0,{},{},sl,sc}); }
+                    else if(s.size()>1&&s[0]=='0'){ long long v=0; for(char ch:s) if(ch>='0'&&ch<='7')v=v*8+(ch-'0'); tokens.push_back(Token{"NUM",0,v,{},{},sl,sc}); }
+                    else { tokens.push_back(Token{"NUM",(double)std::stoll(s),std::stoll(s),{},{},sl,sc}); }
+                } catch (const std::exception&) {
+                    throw std::runtime_error("invalid numeric literal after '!'" + where);
+                }
                 continue;
             }else tokens.push_back(Token{"BANG",0,0,{},{},sl,sc}); continue;
         }
@@ -116,6 +122,7 @@ std::vector<Token> Lexer::tokenize(){
         if(c=='M'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"M",0,0,{},{},sl,sc}); continue;}
         if(c=='N'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"N",0,0,{},{},sl,sc}); continue;}
         if(c=='w'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"CONTINUE",0,0,{},{},sl,sc}); continue;}
+        if(c=='d'){ int sl=line,sc=col; advance(); tokens.push_back(Token{"DO",0,0,{},{},sl,sc}); continue;}
         const int unsupported_line = line, unsupported_column = col;
         const char unsupported = advance();
         throw std::runtime_error("Unsupported character '" + std::string(1, unsupported) +

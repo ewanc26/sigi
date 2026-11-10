@@ -18,23 +18,24 @@ The current frontend and backend are incomplete. Unsupported source characters/t
 
 The source and CLI smoke tests currently cover these basics:
 
-- Numeric literals, including decimal exponent notation such as `1e100`, string literals, and character literals.
+- Numeric literals, including decimal exponent notation such as `1e100`, signed decimals (`!-7`, `!+3`), hex, binary, and octal forms, string literals, and character literals.
 - Stack manipulation: `@` (duplicate), `#` (swap), and `$` (drop).
 - Arithmetic: `+`, `-`, `*`, `/`, and `%`.
 - Comparisons: `=`, `<`, and `>`.
 - Logical NOT: `~`.
 - Numbered variables: `<n>` to load and `:` to store.
 - Numeric output `|`, character output `^`, and numeric input `?`.
+- While loops (`[...]`) and do-while loops (`d[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) inside both loop forms.
 
 This is a source-inspected implementation boundary, not a claim of C conformance or full language completeness. Generated C now checks stack underflow and overflow for stack operations, rejects division and remainder by zero, and diagnoses failed numeric input. Load indices are checked during parsing; stores now reject non-integral, non-finite, and out-of-range indices before casting. Character output validates the floating-point value before converting it to an integer.
 
 ## Not yet implemented end-to-end
 
-The README's broad symbol reference includes syntax intended for the language but not currently lowered correctly by the C++ implementation. Basic `while` loops (`[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) are now lowered to C and covered by end-to-end tests. Still unsupported are function definitions/calls, do-while/for loops, named variables, math built-ins, arrays, file I/O, foreign-function calls, pointer operations, aggregates, casts, switch, and goto. The C++ parser rejects unmatched delimiters, missing if-else separators, and break outside a loop. These constructs must not be advertised as usable until the parser, semantic analysis, and code generator all handle them and regression tests prove the behaviour.
+The README's broad symbol reference includes syntax intended for the language but not currently lowered correctly by the C++ implementation. Basic `while` loops (`[...]`), do-while loops (`d[...]`), if-else blocks (`{ then ; else }`), and loop `break` (`<>`) and `continue` (`w`) are lowered to C and covered by end-to-end tests. Still unsupported are function definitions/calls, for loops, named variables, math built-ins, arrays, file I/O, foreign-function calls, pointer operations, aggregates, casts, switch, and goto. The C++ parser rejects unmatched delimiters, missing if-else separators, `d` without `[`, and break/continue outside a loop. These constructs must not be advertised as usable until the parser, semantic analysis, and code generator all handle them and regression tests prove the behaviour.
 
 The shared `capabilities.json` matrix still needs to be reconciled against the C++ implementation; see [issue #16](https://github.com/ewanc26/sigi/issues/16). Do not use its current entries as independent proof that a feature works.
 
-The current test suite includes unit tests and a CLI smoke test. Broader parity/conformance testing and semantic checks remain tracked in [issue #16](https://github.com/ewanc26/sigi/issues/16).
+The current test suite includes unit tests and a CLI smoke test, plus a matrix-gated differential runner (`scripts/run_differential_tests.py`) that checks every capability row marked implemented for sigi against a C twin and skips the not-yet-implemented rows with their status; `--strict` checks all cases. Broader parity/conformance testing and semantic checks remain tracked in [issue #16](https://github.com/ewanc26/sigi/issues/16).
 
 ## Build and test
 

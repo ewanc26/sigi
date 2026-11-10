@@ -23,3 +23,5 @@ jobs:
           cmake --build build -j
       - name: Unit and CLI smoke tests
         run: ctest --test-dir build --output-on-failure
+      - name: Differential tests against C
+        run: python3 scripts/run_differential_tests.py --binary build/sigic --cc clang

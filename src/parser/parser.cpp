@@ -36,6 +36,17 @@ Program Parser::parse(){
         if(t.kind=="COLON"){ op.kind=SOp::Store; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="LBRACK"){ op.kind=SOp::WhileStart; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="RBRACK"){ op.kind=SOp::WhileEnd; advance(); mainOps.push_back(op); continue; }
+        if(t.kind=="DO"){
+            if (i + 1 >= tokens.size() || tokens[i+1].kind != "LBRACK") {
+                throw std::runtime_error("expected '[' after 'd' at line " +
+                                          std::to_string(t.line) + ", column " +
+                                          std::to_string(t.col));
+            }
+            advance(); advance();
+            op.kind = SOp::DoWhileStart;
+            mainOps.push_back(op);
+            continue;
+        }
         if(t.kind=="LBRACE"){ op.kind=SOp::IfStart; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="RBRACE"){ op.kind=SOp::IfEnd; advance(); mainOps.push_back(op); continue; }
         if(t.kind=="SEMI"){ op.kind=SOp::IfElse; advance(); mainOps.push_back(op); continue; }
@@ -59,12 +70,18 @@ Program Parser::parse(){
     }
     struct ControlFrame { SOp::Kind kind; bool hasElse = false; };
     std::vector<ControlFrame> controls;
-    for (const auto &op : mainOps) {
-        if (op.kind == SOp::WhileStart || op.kind == SOp::IfStart) {
+    for (auto &op : mainOps) {
+        if (op.kind == SOp::WhileStart || op.kind == SOp::DoWhileStart || op.kind == SOp::IfStart) {
             controls.push_back({op.kind, false});
         } else if (op.kind == SOp::WhileEnd) {
-            if (controls.empty() || controls.back().kind != SOp::WhileStart) {
+            if (controls.empty() ||
+                (controls.back().kind != SOp::WhileStart && controls.back().kind != SOp::DoWhileStart)) {
                 throw std::runtime_error("unmatched ']' in control flow");
+            }
+            // A ']' closing a do-while becomes its own terminator so the
+            // code generator can emit the trailing condition.
+            if (controls.back().kind == SOp::DoWhileStart) {
+                op.kind = SOp::DoWhileEnd;
             }
             controls.pop_back();
         } else if (op.kind == SOp::IfElse) {
@@ -83,7 +100,10 @@ Program Parser::parse(){
         } else if (op.kind == SOp::Break || op.kind == SOp::Continue) {
             bool insideLoop = false;
             for (auto frame = controls.rbegin(); frame != controls.rend(); ++frame) {
-                if (frame->kind == SOp::WhileStart) { insideLoop = true; break; }
+                if (frame->kind == SOp::WhileStart || frame->kind == SOp::DoWhileStart) {
+                    insideLoop = true;
+                    break;
+                }
             }
             if (!insideLoop) {
                 throw std::runtime_error(op.kind == SOp::Break
@@ -92,8 +112,8 @@ Program Parser::parse(){
         }
     }
     if (!controls.empty()) {
-        throw std::runtime_error(controls.back().kind == SOp::WhileStart
-            ? "unterminated '[' loop" : "unterminated '{' conditional");
+        throw std::runtime_error(controls.back().kind == SOp::IfStart
+            ? "unterminated '{' conditional" : "unterminated '[' loop");
     }
     prog.mainOps = mainOps;
     return prog;
