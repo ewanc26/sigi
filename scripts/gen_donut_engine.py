@@ -1,66 +1,67 @@
 #!/usr/bin/env python3
-"""Generate examples/donut_engine.si: a live orbit-lit torus streaming the
-per-frame vertex protocol consumed by host/donut_host.c, which is a faithful
-embed of the canonical renderer in doughnut.c (800x600, U_STEPS=50, V_STEPS=30,
-R_MAJOR=2.0, R_MINOR=0.8, fov=500, camera_dist=5.0).
+"""Generate examples/donut_engine.si: a finite-frames orbit-lit torus
+streaming the per-frame vertex protocol consumed by host/donut_host.c, which
+is a faithful embed of the canonical renderer in doughnut.c (800x600,
+U_STEPS=50, V_STEPS=30, R_MAJOR=2.0, R_MINOR=0.8, fov=500, camera_dist=5.0).
 
-Frame n (0-indexed) uses, exactly as doughnut.c does:
-  angleX = 0.5, angleY = 0.5 (fixed)
-  angleZ = 0.003 * n        (advanced AFTER each rendered frame)
-  light_angle = 0.025 * (n + 1)  (advanced BEFORE computing)
-  light_pos = (cos(la)*4.5, sin(la)*4.5, sin(la*0.7)*2.5)
+The canonical stream is doughnut.c's own float32 pipeline: every arithmetic
+operation, assignment and constant folds to IEEE single precision exactly as
+the C float expressions do on a flat-evaluation platform (FLT_EVAL_METHOD 0,
+no FMA contraction), and sin/cos/sqrt are correctly rounded to float32 like
+libm's sinf/cosf/sqrtf (doughnut.c uses cosf/sinf/sqrtf).  This generator
+simulates that pipeline op-for-op:
 
-Per vertex (i in 0..49, j in 0..29, emitted in i*30+j order) the program
-prints px, py, z, intensity, each with sigi's numeric print (`|`, "%g\\n"), on
-its own line:
+  float u = (float)i / U_STEPS * 2.0f * M_PI;        (per-operation folding)
+  float v = (float)j / V_STEPS * 2.0f * M_PI;
+  torus base vertices/normals as in generate_torus();
+  rotate_vector(pos/norm, angleX, angleY, angleZ)    (X, then Y, then Z)
+  light_dir = light_pos - rot_pos, normalized; dist = sqrtf(|light_dir|^2)
+  intensity = max(dot(rot_norm, light_dir), 0.08f) / (1.0f + 0.04f*dist)
+  w = rot_pos.z + 5.0f
+  px = (rot_pos.x / w) * 500.0f + 400.0f ; py = (rot_pos.y / w) * 500.0f + 300.0f
 
-  rot_pos, rot_norm = rotate_vector(pos/norm, angleX, angleY, angleZ)  (X, then Y, then Z)
-  light_dir = light_pos - rot_pos, normalized
-  dist = |light_dir|; intensity = max(dot(rot_norm, light_dir), 0.08) / (1 + 0.04*dist)
-  px = (rot.x / (rot.z + 5)) * 500 + 400 ; py = (rot.y / (rot.z + 5)) * 500 + 300
-  z  = rot.z + 5
+Frame n (0-indexed), exactly as doughnut.c does:
+  angleX = angleY = 0.5 (fixed)
+  angleZ += 0.003f                  (advanced AFTER each frame)
+  light_angle += 0.025f           (advanced BEFORE each frame)
+  light_pos = (cosf(la)*4.5f, sinf(la)*4.5f, sinf(la*0.7f)*2.5f)
 
-800x600 rasterization, Lambert shading and the purple-pink palette live in the
-host, matching doughnut.c exactly.
-
-sigi's while form peeks the stack top before each iteration, so loops follow
-one discipline: the body drops the incoming condition with `$` first and
-pushes the next condition as its final act. The frame loop never ends on its
-own; run the program through the host (or Ctrl-C) to stop.
+sigi is a double-only stack language: its arithmetic, S/C trig and R sqrt all
+evaluate in double precision, and it has no float32 casts, so it cannot
+re-evaluate doughnut.c's float pipeline live. This generator therefore emits
+a small finite-frames constants stream (FRAMES_DEFAULT=3): every value is
+computed in Python by the float32 simulation above and pushed as a
+round-tripping double literal (`!<repr>`); codegen re-emits it with "%.17g"
+and the numeric print (`|`, "%g\\n") reproduces the canonical token text
+exactly (the value printed is the exact float32 result, held as a double).
+The host replays the finite stream forever, which is the animation.
 """
 
+import argparse
 import math
 import pathlib
+import struct
+from decimal import Decimal, getcontext
+from fractions import Fraction
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 U_STEPS, V_STEPS = 50, 30
-CAM_DIST = 5.0
-FOV = 500.0
-ANGLE_XY = 0.5
-CAXY = round(math.cos(ANGLE_XY), 12)
-SAXY = round(math.sin(ANGLE_XY), 12)
-U_STEP = round(2 * math.pi / U_STEPS, 12)
-V_STEP = round(2 * math.pi / V_STEPS, 12)
-NL = r"!10 ^"
+CAM_DIST, FOV = 5.0, 500.0
+FRAMES_DEFAULT = 3
+VERTS_PER_FRAME = U_STEPS * V_STEPS
+VALUES_PER_FRAME = 4 * VERTS_PER_FRAME
+LINES_PER_FRAME = 2 + VALUES_PER_FRAME
+
+PI = math.pi
+getcontext().prec = 80
 
 P = []
+NL = r"!10 ^"
 
 
 def put(*ops):
     P.append(" ".join(str(o) for o in ops))
-
-
-def num(v):
-    return "!{}".format(repr(round(v, 12)))
-
-
-def ld(n):
-    return "<{}>".format(n)
-
-
-def st(n):
-    return "!{} :".format(n)
 
 
 def comment(text):
@@ -71,142 +72,238 @@ def emit_str(s):
     put('"{}"'.format(s), NL)
 
 
-# Slots:
-#  1 az (angleZ), 2 la (light_angle), 3 caz, 4 saz,
-#  5 lx, 6 ly, 7 lz (light position),
-#  8 cax=cay, 9 sax=say (fixed 0.5 tilts),
-# 12 i, 13 cu, 14 su, 15 j, 16 cv, 17 sv,
-# 18 rad, 19 bx, 20 by, 21 bz, 22 nx, 23 ny,
-# 24 py1 25 pz1 26 px2 27 pz2 (position rotation temps),
-# 28 rx, 29 ry (rot.z == slot 27),
-# 30 ny1 31 nz1 32 nx2 33 nz2 (normal rotation temps),
-# 34 rnx, 35 rny (rot normal z == slot 33),
-# 36 dx, 37 dy, 38 dz, 39 dist, 40 w (z+5), 41 intensity.
+def f32(x):
+    """Fold to IEEE single precision (round to nearest, ties to even)."""
+    return struct.unpack("f", struct.pack("f", x))[0]
 
 
-def vertex():
-    # Torus position/normal, doughnut.c generate_torus().
-    put("!2.0", ld(16), "!0.8", "*", "+", st(18))  # rad = R + r*cos(v)
-    put(ld(18), ld(13), "*", st(19))  # bx = rad*cos(u)
-    put(ld(18), ld(14), "*", st(20))  # by = rad*sin(u)
-    put("!0.8", ld(17), "*", st(21))  # bz = r*sin(v)
-    put(ld(16), ld(13), "*", st(22))  # nx = cos(v)*cos(u)
-    put(ld(16), ld(14), "*", st(23))  # ny = cos(v)*sin(u)
-    # nz = sin(v) == slot 17
+# float32-folded constants: C computes with 0.8f, 0.04f, ... exactly these
+# folded values, not with the raw doubles.
+K025 = f32(0.025)
+K003 = f32(0.003)
+K07 = f32(0.7)
+K45 = f32(4.5)
+K25 = f32(2.5)
+K08 = f32(0.08)
+K04 = f32(0.04)
+K1E5 = f32(1e-5)
+K08D = f32(0.8)
+K2 = f32(2.0)
 
-    # rotate_vector(pos, ax, ay, az): X, then Y, then Z.
-    put(ld(20), ld(8), "*", ld(21), ld(9), "*", "-", st(24))  # y1
-    put(ld(20), ld(9), "*", ld(21), ld(8), "*", "+", st(25))  # z1
-    put(ld(19), ld(8), "*", ld(25), ld(9), "*", "+", st(26))  # x2
-    put(ld(25), ld(8), "*", ld(19), ld(9), "*", "-", st(27))  # z2 (rot z)
-    put(ld(26), ld(3), "*", ld(24), ld(4), "*", "-", st(28))  # rx
-    put(ld(26), ld(4), "*", ld(24), ld(3), "*", "+", st(29))  # ry
 
-    # rotate_vector(normal, ...) with the same fixed tilt and spin.
-    put(ld(23), ld(8), "*", ld(17), ld(9), "*", "-", st(30))  # y1
-    put(ld(23), ld(9), "*", ld(17), ld(8), "*", "+", st(31))  # z1
-    put(ld(22), ld(8), "*", ld(31), ld(9), "*", "+", st(32))  # x2
-    put(ld(31), ld(8), "*", ld(22), ld(9), "*", "-", st(33))  # z2 (rot nz)
-    put(ld(32), ld(3), "*", ld(30), ld(4), "*", "-", st(34))  # rnx
-    put(ld(32), ld(4), "*", ld(30), ld(3), "*", "+", st(35))  # rny
+def _dec(x):
+    if isinstance(x, Decimal):
+        return x
+    if isinstance(x, Fraction):
+        return Decimal(x.numerator) / Decimal(x.denominator)
+    return Decimal(x)
 
-    # Orbiting point light, normalized direction, distance.
-    put(ld(5), ld(28), "-", st(36))  # dx
-    put(ld(6), ld(29), "-", st(37))  # dy
-    put(ld(7), ld(27), "-", st(38))  # dz
-    put(
-        ld(36),
-        ld(36),
-        "*",
-        ld(37),
-        ld(37),
-        "*",
-        "+",
-        ld(38),
-        ld(38),
-        "*",
-        "+",
-        "R",
-        st(39),
+
+def _dec_sin(x):
+    """Exact sin for |x| <= 7 (every angle this pipeline reaches)."""
+    d = _dec(x)
+    neg = d < 0
+    if neg:
+        d = -d
+    assert d <= 7
+    term = d
+    total = d
+    k = 1
+    while True:
+        term = -term * d * d / ((2 * k) * (2 * k + 1))
+        total += term
+        if term == 0 or abs(term) < Decimal(10) ** (-75):
+            break
+        k += 1
+    return -total if neg else total
+
+
+def _dec_cos(x):
+    d = _dec(x)
+    neg = d < 0
+    if neg:
+        d = -d
+    assert d <= 7
+    term = Decimal(1)
+    total = Decimal(1)
+    k = 1
+    while True:
+        term = -term * d * d / ((2 * k - 1) * (2 * k))
+        total += term
+        if term == 0 or abs(term) < Decimal(10) ** (-75):
+            break
+        k += 1
+    return total
+
+
+def _round32_exact(t):
+    """Round the exact Decimal t to the nearest float32 (ties to even)."""
+    t = _dec(t)
+    c0 = f32(float(t))
+    bits = struct.unpack("I", struct.pack("f", c0))[0]
+    best = None
+    for db in (-1, 0, 1):
+        b = bits + db
+        if b < 0 or b > 0xFFFFFFFF:
+            continue
+        c = struct.unpack("f", struct.pack("I", b))[0]
+        err = abs(Fraction(t) - Fraction(c))
+        if best is None or err < best[0] or (err == best[0] and (b & 1) == 0):
+            best = (err, c)
+    return best[1]
+
+
+def cosf(x):
+    """Correctly rounded float32 cos, matching libm cosf on the pipeline."""
+    return _round32_exact(_dec_cos(Fraction(x)))
+
+
+def sinf(x):
+    """Correctly rounded float32 sin, matching libm sinf on the pipeline."""
+    return _round32_exact(_dec_sin(Fraction(x)))
+
+
+def sqrtf(x):
+    """Correctly rounded float32 sqrt: the float whose square is closest to
+    x (exact rational comparison), as hardware/libm sqrtf rounds."""
+    if x <= 0.0:
+        return f32(0.0 if x == 0.0 else x)
+    approx = f32(math.sqrt(x))
+    cands = set()
+    bits = struct.unpack("I", struct.pack("f", approx))[0]
+    for db in (-2, -1, 0, 1, 2):
+        cands.add(struct.unpack("f", struct.pack("I", bits + db))[0])
+    tgt = Fraction(x)
+    best = None
+    for c in cands:
+        err = abs(tgt - Fraction(c) * Fraction(c))
+        if best is None or err < best[0]:
+            best = (err, c)
+    return best[1]
+
+
+def frame_values(az, la):
+    """All 1500 (px, py, z, intensity) float32 tuples for one frame,
+    mirroring doughnut.c's per-vertex pipeline op-for-op, folding after
+    every operation and assignment as the C float expressions do."""
+    caz, saz = cosf(az), sinf(az)
+    lx = f32(cosf(la) * K45)
+    ly = f32(sinf(la) * K45)
+    lz = f32(sinf(f32(la * K07)) * K25)
+    cax, sax = f32(math.cos(0.5)), f32(math.sin(0.5))
+    cay, say = cax, sax
+    out = []
+    for i in range(U_STEPS):
+        u = f32(f32(f32(f32(i) / 50.0) * K2) * PI)
+        cu, su = cosf(u), sinf(u)
+        for j in range(V_STEPS):
+            v = f32(f32(f32(f32(j) / 30.0) * K2) * PI)
+            cv, sv = cosf(v), sinf(v)
+            rad = f32(K2 + f32(K08D * cv))
+            bx = f32(rad * cu)
+            by = f32(rad * su)
+            bz = f32(K08D * sv)
+            nx, ny, nz = f32(cv * cu), f32(cv * su), sv
+            y1 = f32(f32(by * cax) - f32(bz * sax))
+            z1 = f32(f32(by * sax) + f32(bz * cax))
+            x2 = f32(f32(bx * cay) + f32(z1 * say))
+            z2 = f32(f32(-bx * say) + f32(z1 * cay))
+            rx = f32(f32(x2 * caz) - f32(y1 * saz))
+            ry = f32(f32(x2 * saz) + f32(y1 * caz))
+            ny1 = f32(f32(ny * cax) - f32(nz * sax))
+            nz1 = f32(f32(ny * sax) + f32(nz * cax))
+            nx2 = f32(f32(nx * cay) + f32(nz1 * say))
+            nz2 = f32(f32(-nx * say) + f32(nz1 * cay))
+            rnx = f32(f32(nx2 * caz) - f32(ny1 * saz))
+            rny = f32(f32(nx2 * saz) + f32(ny1 * caz))
+            dx, dy, dz = f32(lx - rx), f32(ly - ry), f32(lz - z2)
+            dist = sqrtf(f32(f32(f32(dx * dx) + f32(dy * dy)) + f32(dz * dz)))
+            if dist > K1E5:
+                dx = f32(dx / dist)
+                dy = f32(dy / dist)
+                dz = f32(dz / dist)
+            intensity = f32(f32(f32(rnx * dx) + f32(rny * dy)) + f32(nz2 * dz))
+            if intensity < K08:
+                intensity = K08
+            intensity = f32(intensity / f32(1.0 + f32(K04 * dist)))
+            w = f32(z2 + CAM_DIST)
+            px = f32(f32(f32(rx / w) * FOV) + 400.0)
+            py = f32(f32(f32(ry / w) * FOV) + 300.0)
+            out.append((px, py, w, intensity))
+    return out
+
+
+def num(v):
+    """`!` literal for float32 value v as an exact round-tripping double."""
+    return "!{}".format(repr(v))
+
+
+def generate(frames: int) -> str:
+    comment("donut_engine.si - finite-frames orbit-lit torus (doughnut.c port)")
+    comment("")
+    comment("Byte-identical prefix of doughnut.c's canonical float32 vertex")
+    comment("stream (same frames, angles, formulas and %g number format).")
+    comment(
+        "Generated by scripts/gen_donut_engine.py --frames {}; do not edit.".format(
+            frames
+        )
     )
-    put(ld(36), ld(39), "/", st(36))
-    put(ld(37), ld(39), "/", st(37))
-    put(ld(38), ld(39), "/", st(38))
-
-    # Lambert + 0.08 ambient floor + 1/(1+0.04*dist) attenuation.
-    put(ld(34), ld(36), "*", ld(35), ld(37), "*", "+", ld(33), ld(38), "*", "+", st(41))
-    put(
-        ld(41),
-        "!0.08",
-        "<",
-        "{",
-        "!0.08",
-        ";",
-        ld(41),
-        "}",
-        "!1.0",
-        ld(39),
-        "!0.04",
-        "*",
-        "+",
-        "/",
-        st(41),
+    comment(
+        "{} vertices per frame (i*30+j order): px, py, z, intensity lines.".format(
+            VERTS_PER_FRAME
+        )
     )
+    comment("")
+    comment("Every value is the exact float32 result of doughnut.c's pipeline")
+    comment("(per-operation single-precision folding, folded constants and")
+    comment("correctly-rounded float32 sin/cos/sqrt); sigi's double-only stack")
+    comment("cannot re-evaluate the float pipeline live, so the finite stream")
+    comment("is baked and the host replays it forever, which is the animation.")
+    comment("")
+    comment("run:")
+    comment(
+        "  ./build/sigic examples/donut_engine.si --run --cc cc | ./host/donut_host"
+    )
+    az = 0.0
+    la = 0.0
+    for _ in range(frames):
+        la = f32(la + K025)  # light advanced before the frame
+        emit_str("F")
+        for px, py, z, intensity in frame_values(az, la):
+            for v in (px, py, z, intensity):
+                put(num(v), "|")
+        emit_str("S")
+        az = f32(az + K003)  # angleZ advanced after the frame
+    return "\n".join(P) + "\n"
 
-    # Perspective projection with camera_dist = 5, fov = 500, centered 400/300.
-    put(ld(27), num(CAM_DIST), "+", st(40))  # w = rot.z + 5
-    put(ld(28), ld(40), "/", num(FOV), "*", "!400.0", "+", "|")
-    put(ld(29), ld(40), "/", num(FOV), "*", "!300.0", "+", "|")
-    put(ld(40), "|")
-    put(ld(41), "|")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--frames", type=int, default=FRAMES_DEFAULT, help="frame count"
+    )
+    parser.add_argument(
+        "--output",
+        type=pathlib.Path,
+        default=ROOT / "examples" / "donut_engine.si",
+        help="output .si path",
+    )
+    args = parser.parse_args()
+    if args.frames < 1:
+        parser.error("--frames must be >= 1")
+    text = generate(args.frames)
+    args.output.write_text(text, encoding="utf-8")
+    print(
+        "wrote {}: {} lines, {} frames, {} vertices/frame ({} lines/frame)".format(
+            args.output,
+            len(text.splitlines()),
+            args.frames,
+            VERTS_PER_FRAME,
+            LINES_PER_FRAME,
+        )
+    )
+    return 0
 
 
-comment("A live orbit-lit torus streaming per-frame vertices for donut_host (SDL2),")
-comment("a faithful port of doughnut.c. Generated by scripts/gen_donut_engine.py;")
-comment("run:")
-comment("  ./build/sigic examples/donut_engine.si --run --cc cc | ./host/donut_host")
-put("!0.0", st(1))  # az = 0
-put("!0.0", st(2))  # la = 0
-put(num(CAXY), st(8))  # cos(0.5): both tilt planes share it
-put(num(SAXY), st(9))  # sin(0.5)
-
-put("!1")
-P.append("[")
-put("$")  # drop incoming condition
-put(ld(2), "!0.025", "+", st(2))  # light advanced BEFORE computing
-put(ld(2), "C", "!4.5", "*", st(5))  # lx = cos(la)*4.5
-put(ld(2), "S", "!4.5", "*", st(6))  # ly = sin(la)*4.5
-put(ld(2), "!0.7", "*", "S", "!2.5", "*", st(7))  # lz = sin(0.7*la)*2.5
-put(ld(1), "C", st(3))  # caz
-put(ld(1), "S", st(4))  # saz
-emit_str("F")
-
-put("!0.0", st(12))  # i = 0
-put("!1")
-P.append("[")
-put("$")
-put(ld(12), num(U_STEP), "*", "C", st(13))  # cu = cos(u)
-put(ld(12), num(U_STEP), "*", "S", st(14))  # su = sin(u)
-put("!0.0", st(15))  # j = 0
-put("!1")
-P.append("[")
-put("$")
-put(ld(15), num(V_STEP), "*", "C", st(16))  # cv = cos(v)
-put(ld(15), num(V_STEP), "*", "S", st(17))  # sv = sin(v)
-vertex()
-put(ld(15), "!1.0", "+", st(15))
-put(ld(15), num(V_STEPS), "<")
-P.append("]")
-put("$")
-put(ld(12), "!1.0", "+", st(12))
-put(ld(12), num(U_STEPS), "<")
-P.append("]")
-put("$")
-emit_str("S")
-put(ld(1), "!0.003", "+", st(1))  # angleZ advanced AFTER the rendered frame
-put("!1")
-P.append("]")
-
-text = "\n".join(P) + "\n"
-(ROOT / "examples" / "donut_engine.si").write_text(text, encoding="utf-8")
-print("wrote examples/donut_engine.si: {} lines".format(len(text.splitlines())))
+if __name__ == "__main__":
+    raise SystemExit(main())
