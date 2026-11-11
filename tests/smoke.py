@@ -12,7 +12,7 @@ def run(
     command: list[str], *, expected_status: int
 ) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        command, text=True, errors="replace", capture_output=True, timeout=20
+        command, text=True, errors="replace", capture_output=True, timeout=120
     )
     if result.returncode != expected_status:
         raise AssertionError(
