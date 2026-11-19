@@ -81,6 +81,7 @@ int main(int argc, char **argv) {
         std::cout << "Support Sigi development:\n";
         std::cout << "  Ko-fi: https://ko-fi.com/ewancroft\n";
         std::cout << "  GitHub Sponsors: https://github.com/sponsors/ewanc26\n";
+        std::cout << "  Liberapay: https://liberapay.com/ewanc26/\n";
         return 0;
     }
 
