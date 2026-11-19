@@ -4,6 +4,7 @@ Guidance for AI coding agents working in **sigi**.
 
 ## Project overview
 
+A pure symbolic stack language with a C++20 compiler frontend that emits C source.
 
 
 - Language: C++
