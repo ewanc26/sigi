@@ -1,5 +1,6 @@
 <p align="center">
   <a href="https://github.com/ewanc26/sigi/actions/workflows/ci.yml"><img src="https://github.com/ewanc26/sigi/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/ewanc26/sigi/releases/latest"><img src="https://img.shields.io/github/v/release/ewanc26/sigi?sort=semver" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ewanc26/sigi?label=licence" alt="Licence"></a>
   <a href="https://github.com/sponsors/ewanc26"><img src="https://img.shields.io/github/sponsors/ewanc26?logo=githubsponsors&logoColor=white&label=sponsors" alt="Sponsor"></a>
 </p>
@@ -42,8 +43,7 @@ The interactive REPL and `--interpret` mode are not implemented. `sigic` require
 
 ## Symbol reference
 
-The table below records the intended language surface, not a claim that every entry is available in the current C++ compiler. Consult [the compiler status](
-docs/compiler-status.md) before relying on a feature that is not covered by the current end-to-end tests.
+The table below records the intended language surface, not a claim that every entry is available in the current C++ compiler. Consult [the compiler status](docs/compiler-status.md) before relying on a feature that is not covered by the current end-to-end tests.
 
 | Symbol | Name | Effect |
 |--------|------|--------|
@@ -74,8 +74,7 @@ docs/compiler-status.md) before relying on a feature that is not covered by the 
 | `(N)` | CALL | Call function N |
 | `(.name)` | CALLN | Call named function |
 | `"text"` | STRING | Print characters; C escapes (`\n`, `\t`, `\xHH`, `\ooo`, `\uXXXX`, `\UXXXXXXXX`) decode to bytes. Any other escape, such as `\e`, is an error |
-| `'x` | CHAR | 
-Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
+| `'x` | CHAR | Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
 | `\\` | COMMENT | Line comment |
 | `/* body */` | BLOCK COMMENT | Multi-line comment |
 | `S` | SIN | Pop a → push sin(a) |
@@ -112,8 +111,7 @@ Push character code; accepts C escapes such as `'\n`, `'\x41`, `'\101` |
 | `f{ body }` | FOR | Pop count, run body that many times |
 | `x "header" .name !N` | FFI_DECL | Declare C function `name` with N double arguments from `<header>`; a `.c` path is compiled and linked from the source's directory |
 | `c .name` | FFI_CALL | Pop N arguments, call declared C function, push result |
-| `d[ b
-ody ]` | DO-WHILE | Run body, then repeat while stack top nonzero |
+| `d[ body ]` | DO-WHILE | Run body, then repeat while stack top nonzero |
 | `q` | BREAK | Leave the innermost loop or switch |
 | `w` | CONTINUE | Continue the innermost loop |
 | `e{ .A .B .C !5 .D }` | ENUM | Declare integer constants; each takes the previous value + 1 unless followed by `!N` |
@@ -133,8 +131,7 @@ ody ]` | DO-WHILE | Run body, then repeat while stack top nonzero |
 | `r.Name .obj = { ... }` | DECL | Declare a struct object, filling members in order from a brace list; nested braces fill struct members, and missing members are zeroed |
 | `u.Name{ .f .T ... }` | UNION | Define union Name; members share storage, each starting at offset 0 |
 | `n.f` | MEMBER | Pop a pointer to a struct, push a pointer to its member f |
-| `r .T [ !N ... ] .name` | DECL | Declare an array of scalar or struct type T with the given extents (one or more, after the type). A multi-dimensional array decays to a pointer to its rows. `+`/`-` on a pointer step by the size of what it
- addresses, so for a row pointer one step is a whole row |
+| `r .T [ !N ... ] .name` | DECL | Declare an array of scalar or struct type T with the given extents (one or more, after the type). A multi-dimensional array decays to a pointer to its rows. `+`/`-` on a pointer step by the size of what it addresses, so for a row pointer one step is a whole row |
 | `r .static .T .name` / `r .const .T .name` | DECL | `.static` is the file-scope default (accepted for explicitness); `.const` objects cannot be assigned with `:.name`, and a store through a pointer to one (`j.name` or a member pointer) exits 1 at run time. Qualifiers go before the type, and only on objects, not on struct definitions |
 | `t.Name .T` | TYPEDEF | Declare `Name` as an alias for scalar type T (top level only) |
 
@@ -178,11 +175,10 @@ If you find this project useful, consider supporting its development:
 
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ewancroft)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-30363D?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sponsors/ewanc26)
+## Licence
+
+See [LICENSE](LICENSE) for the licence terms.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and the checks required before opening a pull request.
-
-## Licence
-
-See [LICENSE](LICENSE) for the licence terms.
