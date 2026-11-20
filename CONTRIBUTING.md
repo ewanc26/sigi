@@ -1,27 +1,28 @@
 # Contributing to Sigi
 
-## Project context
+A pure symbolic stack language with a C++20 compiler frontend that emits C source, where sigic in `--run` mode invokes a host C compiler to build and run the generated code. All syntax is symbolic: no alphanumeric keywords, and user-defined names are prefixed with `.`. Thanks for wanting to help!
 
-- Implementation language: C++20
-- Compiler output: generated C source; `--run` invokes a host C compiler
-- Default branch: `main`
-
-## Development setup
-
-A C++20 compiler, CMake, Python 3, and a host C compiler are needed. Catch2 is fetched by CMake during configuration.
+## Getting started
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+# binary: build/sigic
 ```
 
-## Working rules
+## Notes for this project
 
-- Read the README, CMake build definition, CI workflow, and compiler-status document before changing the implementation.
-- Preserve the lexer → parser → semantic analysis → C code generation pipeline.
-- Unsupported language constructs must be rejected clearly; never silently drop source tokens or AST operations.
-- Add or update an end-to-end test when changing syntax or generated-code behaviour.
-- Keep the README, compiler-status document, and capability matrix aligned with verified C++ behaviour.
-- Keep changes focused and use a feature branch and pull request.
-- Do not commit generated build directories or compiler outputs.
+- **Purity is the concept.** Everything stays symbolic; adding an alphanumeric keyword should be treated as a language-design decision to argue for in an issue, not a convenience in a PR.
+- The current compiler covers a tested core subset (numeric/string/character literals, stack manipulation, arithmetic, comparisons, `~`, I/O, numbered variables, `while` loops, if-else, `break`/`continue`); the full symbol reference describes the intended language. **Check [the C++ compiler status] docs before implementing an unsupported symbol** — implementing one is welcome, but deliberately and visibly, not accidentally.
+- The compiler emits C: prefer readable, portable C99 over clever codegen, since users read the output.
+- Update the symbol reference and status docs in the same PR as any behaviour change.
+
+## Before opening a PR
+
+- Build passes and your example programs round-trip: `sigic x.si -o x.c` then `sigic x.si --run` produce the same result.
+- Conventional commits; focused PRs; include the sample programs you compiled with the change.
+- AI-assisted PRs welcome; stand behind every line and run both paths yourself.
+
+## Licence
+
+See [LICENSE](LICENSE). Contributions accepted under the same terms.
